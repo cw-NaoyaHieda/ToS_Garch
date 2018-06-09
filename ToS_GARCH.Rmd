@@ -101,7 +101,16 @@ PP.test(df$log_x[-1])
 
 # GARCHモデル
 
+$$
+\epsilon_t \sim N \left( 0, \sigma_t^2 \right) \\ 
+\epsilon_t = \sigma_t z_t \\ 
+z_t \sim N \left(0, 1 \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2
+$$
+
 ## 正規分布版
+
+GARCH(1,1)に対して推定
 
 ```{r}
 #tseriesのGARCH
@@ -133,4 +142,7 @@ ggplot(plot_d %>% gather(key=fun,value,-dt)) +
 ```
 
 plotも最初以外完全に一致
+
+## ToS版
+
 
