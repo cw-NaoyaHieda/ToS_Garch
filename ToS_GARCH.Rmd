@@ -1,0 +1,136 @@
+---
+title: "ToS_GARCH"
+author: "Naoya Hieda"
+date: "2018-06-09"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    number_sections: yes
+    css: "toc.css"
+    toc_depth: 2
+    pandoc_args: [
+        "--from", "markdown+autolink_bare_uris+tex_math_single_backslash-implicit_figures"
+        ]
+---
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.width=6,
+               fig.height=4)
+opts_knit$set(width=75)
+set.seed(2017)
+```
+
+
+```{r package}
+#実験で使う関数
+source("script/functions.R")
+objects()
+#パッケージのインストールと読み込み
+#持ってないパッケージはインストールする
+targetPackages <- c('xts',"tseries",'tidyverse','scales') 
+newPackages <- targetPackages[!(targetPackages %in% installed.packages()[,"Package"])]
+if(length(newPackages)) install.packages(newPackages, repos = "http://cran.us.r-project.org")
+for(package in targetPackages) library(package, character.only = T)
+```
+
+# 株価収益率の分析
+
+```{r n225}
+#データの読み込み
+n225 <- read.csv("data/nky.csv",header=TRUE,skip=4)
+y <- NULL
+#終値(1日の最後の値段)を使う
+y$Close <- n225$PX_LAST
+#日付データをDate型に変換
+y$ymd <- as.POSIXct(n225$Date)
+#データフレームにする(行列の列に名前がついているもの)
+#ggplotはdata.frameのデータにしか使えないので注意
+df <-data.frame(dt=y$ymd, x=y$Close)
+```
+
+## 日経225<br>平均株価指数の遷移
+
+```{r n225plot}
+#ggplotで日経平均株価をplot
+#ggplotの各関数の意味は自分で調べること
+ggplot(df,aes(x=dt,y=x))+geom_line()+
+        scale_x_datetime(breaks = date_breaks("6 months"))+
+        labs(x="Date",y="N225")+
+        theme_bw()
+```
+
+## 日経平均の<br>対数収益率の推移
+
+```{r n225logplot}
+#日経平均の対数収益率をplot
+df$log_x <- c(NA,diff(log(df$x)))
+ggplot(df[-1,],aes(dt,log_x))+geom_line()+
+        scale_x_datetime(breaks = date_breaks("6 months"))+
+        labs(x="Date",y="log return")+
+        theme_bw()+
+        theme(strip.background = element_blank(),
+              panel.border = element_rect(colour = "black"))
+```
+
+
+## 基礎統計量
+
+```{r fs}
+summary(df)
+dim(df)
+str(df)
+```
+
+
+## 単位根検定
+```{r}
+PP.test(df$x)
+PP.test(df$log_x[-1])
+```
+
+# GARCHモデル
+
+## 正規分布版
+
+```{r}
+#tseriesのGARCH
+R_fun_res <- garch(df$log_x[-1])
+#自作のGARCH
+my_fun_res <- garch_f_opt(df$log_x[-1])
+#分散の計算
+my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par)
+```
+
+### パラメータの確認
+
+```{r}
+R_fun_res$coef
+exp(my_fun_res$par)
+```
+
+ほぼ一緒(`tserise:garch`はb1がp、a1がq)
+
+### Plot
+
+```{r}
+plot_d  <- data.frame(dt = df$dt[-1],
+                R_fun = R_fun_res$fitted.values[,1], my_fun = my_fun_res2 %>% sqrt())
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+plotも最初以外完全に一致
+
