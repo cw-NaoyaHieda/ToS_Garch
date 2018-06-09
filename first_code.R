@@ -20,9 +20,13 @@ y$ymd <- as.POSIXct(n225$Date)
 #データフレームにする(行列の列に名前がついているもの)
 #ggplotはdata.frameのデータにしか使えないので注意
 df <-data.frame(dt=y$ymd, x=y$Close)
-
 #日経平均の対数収益率をplot
 df$log_x <- c(NA,diff(log(df$x))*100)
+
+#https://www.slideshare.net/horihorio/garch-by-r
+PP.test(df$x)
+PP.test(df$log_x[-1])
+
 ggplot(df[-1,],aes(dt,log_x))+geom_line()+
   scale_x_datetime(breaks = date_breaks("6 months"))+
   labs(x="Date",y="log return")+
@@ -82,14 +86,17 @@ garch_f <- function(data, params, order = c(1, 1), error = "norm"){
 }
 
 
-R_fun_res <- garch(df$log_x[-1])
-my_fun_res <- garch_f_opt(df$log_x[-1])
-my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par)
+#R_fun_res <- garch(df$log_x[-1])
+#my_fun_res <- garch_f_opt(df$log_x[-1])
+#my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par)
+R_fun_res <- garch(df$log_x[-1]/100)
+my_fun_res <- garch_f_opt(df$log_x[-1]/100)
+my_fun_res2 <- garch_f(df$log_x[-1]/100, my_fun_res$par)
+#R_fun_res <- garch(sp.ret)
+#my_fun_res <- garch_f_opt(sp.ret)
+#my_fun_res2 <- garch_f(sp.ret, my_fun_res$par)
 R_fun_res$coef
 exp(my_fun_res$par)
-
-plot(R_fun_res$fitted.values[,1] , type="l", main="MLE GARCH volatility ", ylab="", minor.ticks=F)
-plot(garch_f(df$log_x[-1], my_fun_res$par) , type="l", main="MLE GARCH volatility ", ylab="", minor.ticks=F)
 
 plot_d  <- data.frame(dt = df$dt[-1],
                 R_fun = R_fun_res$fitted.values[,1], my_fun = my_fun_res2 %>% sqrt())
@@ -97,4 +104,6 @@ plot_d  <- data.frame(dt = df$dt[-1],
 ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
   geom_line(aes(x = dt, y= value,color=fun)) +
   theme_bw()
+
+
 

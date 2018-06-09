@@ -2,7 +2,9 @@
 
 #garch関数
 library(tseries)
-sp <- read.csv("data/nky.csv",header=TRUE,skip=4)[,2] %>% log()
+#sp <- read.csv("data/nky.csv",header=TRUE,skip=4)[,2] 
+sp <- read.csv("data/SP500.csv",header=TRUE)[,2]
+sp %>% as.character() %>% as.numeric()
 sp.ret <- sp/lag(sp)-1
 sp.ret <- sp.ret[-1]
 sp.ts.garch <- garch(sp.ret) #デフォルトはGARCH(1,1)
@@ -54,6 +56,7 @@ sp.garch.sigma <- xts(sqrt(sp.garch.sigma*250), order.by=as.Date(read.csv("data/
 
 plot(sp.garch.sigma,  type="l", main="MLE GARCH volatility ", ylab="", minor.ticks=F)
 lines(sp.ts.sigma[,1], col=2)
+plot(sp.ts.sigma[,1],  type="l", main="MLE GARCH volatility ", ylab="", minor.ticks=F)
 legend("topright", c("optim", "tseries"), lty=rep(1,2), col=c(1,2), bty="n")
 
 plot(sp.garch.sigma-sp.ts.sigma[,1], type="l", main="Vol diff", minor.ticks=F)
