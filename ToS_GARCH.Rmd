@@ -11,6 +11,8 @@ output:
     pandoc_args: [
         "--from", "markdown+autolink_bare_uris+tex_math_single_backslash-implicit_figures"
         ]
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r knitr_init, echo=FALSE, cache=FALSE}
@@ -35,6 +37,7 @@ set.seed(2017)
 ```{r package}
 #実験で使う関数
 source("script/functions.R")
+source("script/ToS_functions.R")
 objects()
 #パッケージのインストールと読み込み
 #持ってないパッケージはインストールする
@@ -128,11 +131,34 @@ R_fun_res$coef
 exp(my_fun_res$par)
 ```
 
-ほぼ一緒(`tserise:garch`はb1がp、a1がq)
+ほぼ一緒(`tserise:garch`はb1がp、a1がq)  
+
 
 ### Plot
 
 ```{r}
+plot_d_norm  <- data.frame(dt = df$dt[-1],
+                R_fun = R_fun_res$fitted.values[,1], my_fun = my_fun_res2 %>% sqrt())
+
+ggplot(plot_d_norm %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+plotも最初以外完全に一致
+
+ただし、対数収益率を100倍するとあまり一致しない
+
+```{r}
+#tseriesのGARCH
+R_fun_res <- garch(df$log_x[-1]*100)
+#自作のGARCH
+my_fun_res <- garch_f_opt(df$log_x[-1]*100)
+#分散の計算
+my_fun_res2 <- garch_f(df$log_x[-1]*100, my_fun_res$par)
+R_fun_res$coef
+exp(my_fun_res$par)
+
 plot_d  <- data.frame(dt = df$dt[-1],
                 R_fun = R_fun_res$fitted.values[,1], my_fun = my_fun_res2 %>% sqrt())
 
@@ -141,8 +167,120 @@ ggplot(plot_d %>% gather(key=fun,value,-dt)) +
   theme_bw()
 ```
 
-plotも最初以外完全に一致
-
 ## ToS版
 
+$$
+\epsilon_t \sim F_{SA} \left(\theta \right) \\ 
+\epsilon_t = \sigma_t z_t \\ 
+z_t \sim F_{SA} \left(\theta,\sigma = 1 \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2
+$$
+ 
+ パラメータがそもそも時変しているパターンと、$\sigma$だけ変化するパターンが考えられる？  
+ そもそも$\sigma$は標準偏差じゃないんですよね・・・
+ 
+ 後者の方が簡単なはずなので、まずは後者から
+ 
+ 元の分布を分散1になるように変換する必要は・・・ない？あれ、ある？  
+ 
+ 
+
+$$
+f_{FA}(x;\mu,\sigma,\lambda,\delta)=\frac{δC(r((x−μ)/σ;λ)}
+{\sqrt{2\pi(1 + r ((x − \mu)/\sigma; \lambda)^2)}} \times \exp^{−S(r((x − \mu/\sigma; \lambda); δ)^2/2}
+$$
+ 
+## 尺度変換した<br>sinh-arcsinh分布の<br>パラメータ推定
+
+```{r MLE,fig.height=4}
+rt <- df$log_x[-1]*100
+rt <- rt[rt!=0]
+fit <- mle.dfas2(rt, ini=c(0, log(0.2), -0.2, 0.5))
+
+fit$par2
+```
+
+ 
+ 
+```{r}
+plot1 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=fit$par2[2],lambda=fit$par2[3],delta=fit$par2[4])
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=0.5,lambda=fit$par2[3],delta=fit$par2[4])
+plot3 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=1,lambda=fit$par2[3],delta=fit$par2[4])
+plot4 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=1.5,lambda=fit$par2[3],delta=fit$par2[4])
+plot5 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=2,lambda=fit$par2[3],delta=fit$par2[4])
+
+plot_d <- data.frame(plot1,plot2,plot3,plot4,plot5) %>% gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+```
+
+ 変換しなきゃダメですね  
+ 塩浜先生がおっしゃっていたのは、密度関数を標準偏差で割った分布・・・
+
+```{r}
+fas2.moment(fit$par2)
+
+plot1 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=fit$par2[2],lambda=fit$par2[3],delta=fit$par2[4])
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=fit$par2[2],lambda=fit$par2[3],delta=fit$par2[4])/sqrt(fas2.moment(fit$par2)$v2)
+
+plot_d <- data.frame(plot1,plot2) %>% gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+```
+
+これ、積分したとき、1にならないですよね？？
+
+## 何も変換せずに
+
+パラメータ$\sigma$を標準偏差だと考えて、分布も変換しないでやってみる
+
+つまり下記の式のイメージ
+
+$$
+\epsilon_t \sim F_{SA} \left(\mu,\sigma_t,\delta,\lambda \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2
+$$
+
+
+```{r}
+tos_para <- c(mu = fit$par2[1], sigma = fit$par2[2], lambda = fit$par2[3], delta = fit$par2[4])
+#自作のGARCH
+my_fun_res <- garch_f_opt(df$log_x[-1]*100, error = "ToS",dis_para = tos_para)
+#分散の計算
+my_fun_res2 <- garch_f(df$log_x[-1]*100, my_fun_res$par, error = "ToS",dis_para = tos_para)
+exp(my_fun_res$par)
+```
+
+### Plot
+
+```{r}
+plot_d_tos  <- data.frame(dt = df$dt[-1],
+                my_fun_tos = my_fun_res2 %>% sqrt())
+
+ggplot(plot_d_tos %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+・・・？？？
+
+見覚えがありますね・・・
+
+正規分布のものと並べてみます
+
+```{r}
+ggplot() + 
+  geom_line(data = plot_d_tos %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  geom_line(data = plot_d_norm %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+
+ggplot() + 
+  geom_line(data = plot_d_tos %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  geom_line(data = plot_d_norm %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  theme_bw() + facet_wrap(~fun,scales = "free",nrow=3)
+  
+```
+
+
+よくみたら、GARCHのパラメータがほぼ一緒なので似たような$\sigma$になるのは当然ですね
 
