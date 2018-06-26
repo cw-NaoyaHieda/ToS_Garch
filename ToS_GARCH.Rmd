@@ -41,7 +41,7 @@ source("script/ToS_functions.R")
 objects()
 #パッケージのインストールと読み込み
 #持ってないパッケージはインストールする
-targetPackages <- c('xts',"tseries",'tidyverse','scales') 
+targetPackages <- c('xts',"tseries",'tidyverse','scales',"tidyverse","ggforce","doParallel") 
 newPackages <- targetPackages[!(targetPackages %in% installed.packages()[,"Package"])]
 if(length(newPackages)) install.packages(newPackages, repos = "http://cran.us.r-project.org")
 for(package in targetPackages) library(package, character.only = T)
@@ -283,6 +283,97 @@ ggplot() +
 
 
 よくみたら、GARCHのパラメータがほぼ一緒なので似たような$\sigma$になるのは当然ですね
+
+
+
+
+## ローリング推定のパラメータを当てはめてみる
+
+
+ローリング推定のパラメータを使って、GARCH。  
+つまり、下記の式。
+
+$$
+\epsilon_t \sim F_{SA} \left(\mu_t,\sigma_t,\delta_t,\lambda_t \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2\\
+\left(\mu_t,\delta_t,\lambda_t \right) \sim Rolling Estimate
+$$
+
+
+```{r}
+load("data/20180530_rolling_result_useoldpara.Rdata")
+colnames(result) <- c("dt","IS_VaR_fa_0.01","IS_ES_fa_0.01",
+                      "IS_VaR_fa_0.025","IS_ES_fa_0.025",
+                      "IS_VaR_fa_0.05","IS_ES_fa_0.05",
+                      "IS_VaR_norm_0.01","IS_ES_norm_0.01",
+                      "IS_VaR_norm_0.025","IS_ES_norm_0.025",
+                      "IS_VaR_norm_0.05","IS_ES_norm_0.05",
+                      "SMC_VaR_fa_0.01","SMC_VaR_fa_0.025","SMC_VaR_fa_0.05",
+                      "SMC_ES_fa_0.01","SMC_ES_fa_0.025","SMC_ES_fa_0.05",
+                      "SMC_VaR_norm_0.01","SMC_VaR_norm_0.025","SMC_VaR_norm_0.05",
+                      "SMC_ES_norm_0.01","SMC_ES_norm_0.025","SMC_ES_norm_0.05",
+                      "mu","sigma","lambda","delta")
+result_para <- result[,c(1,26,27,28,29)]  %>% data.frame()
+result_para$dt <- df$dt[c(251:length(df$dt))]
+```
+
+
+```{r}
+df_with_roll <- result_para %>% left_join(df,by = "dt")
+#自作のGARCH
+my_fun_res_roll <- garch_f_opt(df_with_roll$log_x[-1]*100, error = "ToS",
+                          dis_para = df_with_roll[,c("mu","sigma","delta","lambda")])
+#分散の計算
+my_fun_res_roll2 <- garch_f(df_with_roll$log_x[-1]*100, my_fun_res_roll$par,
+                       error = "ToS",dis_para = df_with_roll[,c("mu","sigma","delta","lambda")])
+exp(my_fun_res_roll$par)
+```
+
+### Plot
+
+ローリング推定の$\sigma$と比較
+
+```{r}
+plot_d_tos_roll  <- data.frame(dt = df_with_roll$dt[-1],
+                my_fun_tos_roll = my_fun_res_roll2 %>% sqrt(),
+                rolling = pull(df_with_roll,sigma)[-1])
+
+ggplot(plot_d_tos_roll %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  geom_line(data = plot_d_tos %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  facet_zoom(x = dt >= plot_d_tos_roll$dt[1]) +
+  theme_bw()
+```
+
+
+他の推定と似た結果でした。
+
+
+# 評価
+
+250日分のHV(Historical Volatility)と比較
+
+```{r}
+cl <- makeCluster(detectCores()-1)  # クラスタの作成
+registerDoParallel(cl)
+clusterExport(cl,list("fas2.var"))
+
+HV <- pforeach::pforeach(i = 250:length(df$log_x), .combine='rbind') ({
+  sd(df$log_x[(i-249):i]*100)
+})
+
+stopCluster(cl)
+
+
+ggplot(plot_d_tos_roll %>% gather(key=fun,value,-dt)) + 
+  geom_path(aes(x = dt, y= value,color=fun)) +
+  geom_path(data = plot_d_tos %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
+  geom_path(data= data.frame(dt=df$dt[251:length(df$dt)],HV=HV[-1,1]), aes(x=dt,y=HV,color="HV")) +
+  facet_zoom(x = dt >= plot_d_tos_roll$dt[1]) +
+  theme_bw()
+```
+
+
 
 # 自作関数確認
 
