@@ -14,7 +14,13 @@ output:
         ]
 ---
 
-[更新されたのはここ](#newpage)
+重みなし
+
+重み付きweight
+
+重み付きweight+location_shift(VaRとES両方にsfift)
+
+の三つの結果をまとめる
 
 
 ```{r knitr_init, echo=FALSE, cache=FALSE}
@@ -485,7 +491,7 @@ ggplot(data=data.frame(x=c(-6,-1)),aes(x=x))+
 重点分布
 
 ```{r}
-ggplot(data=data.frame(x=c(-10,-1)),aes(x=x))+
+ggplot(data=data.frame(x=c(-10,3)),aes(x=x))+
   stat_function(fun = f,
                 aes(color="0.01"),
                 args = list(par=fit$par2,
