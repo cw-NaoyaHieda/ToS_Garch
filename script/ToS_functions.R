@@ -67,10 +67,31 @@ fas2.var<- function(par){
   v2 <- integrate( f2, lower=-Inf, upper=Inf)$value
   return(v2=v2) 
 }
-
+#局度変換を伴うsinh-arcsinh分布の確率分布関数
+pfa2 <- function(x, mu, sigma, lambda, delta){
+  f <- function(y) dfas2(y, mu, sigma, lambda, delta)
+  return( integrate( f, lower=-Inf, upper=x)$value)
+}
 #局度変換を伴うsinh-arcsinh分布の 分位点関数
 qfas <-function(p, mu, sigma, lambda, delta){
   eps=0.001
   f <- function(x) return( pfa2(x,  mu, sigma, lambda, delta) -p)
   uniroot(f, interval=c(-10,10),extendInt="yes", trace=1)$root
+}
+#局度変換を伴うsinh-arcsinh分布のESを数値計算で求める関数
+find.ES <- function(p, par){
+  VaR<- qfas(p, mu=par[1], sigma=par[2], lambda=par[3], delta = par[4])
+  #-無限からVaRまでの積分
+  f <- function(x) x*dfas2(x,
+                           mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  #積分した値から期待値を計算
+  return( integrate( f, lower=-Inf, upper=VaR)$value/p ) }
+
+## 重点サンンプリングに用いるResampleの関数
+Resample1 <- function(data, weight, NofSample){
+  re_ind <- runif(NofSample)
+  cmwt <- cumsum(weight)/sum(weight);
+  st <- sapply(re_ind, function(x) sum(x>cmwt[-length(cmwt)]))
+  newdata <- data[ (st+1) ]
+  return(newdata)
 }
