@@ -59,3 +59,18 @@ fas2.moment<- function(par){
   b2 <- integrate( f4, lower=-Inf, upper=Inf)$value
   return(list(m1=m1, v2=v2,b1=b1, b2=b2)) 
 }
+# 局度変換を伴うsinh-arcsinh(x)分布の平均，分散，歪度，尖度を計算する関数
+fas2.var<- function(par){
+  f1 <- function(x) x*dfas2(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  m1 <- integrate( f1, lower=-Inf, upper=Inf)$value
+  f2 <- function(x) (x-m1)^2*dfas2(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  v2 <- integrate( f2, lower=-Inf, upper=Inf)$value
+  return(v2=v2) 
+}
+
+#局度変換を伴うsinh-arcsinh分布の 分位点関数
+qfas <-function(p, mu, sigma, lambda, delta){
+  eps=0.001
+  f <- function(x) return( pfa2(x,  mu, sigma, lambda, delta) -p)
+  uniroot(f, interval=c(-10,10),extendInt="yes", trace=1)$root
+}
