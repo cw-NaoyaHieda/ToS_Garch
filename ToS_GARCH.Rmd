@@ -1,0 +1,212 @@
+---
+title: "ToS 標準化した分布の作成 + GARCH"
+author: "Naoya Hieda"
+date: "2018-06-26"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    number_sections: yes
+    css: "toc.css"
+    code_folding: hide
+    toc_depth: 2
+    pandoc_args: [
+        "--from", "markdown+autolink_bare_uris+tex_math_single_backslash-implicit_figures"
+        ]
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.width=8,
+               fig.height=6)
+opts_knit$set(width=75)
+set.seed(2017)
+```
+
+
+```{r package}
+#実験で使う関数
+source("script/ToS_functions.R")
+source("script/functions.R")
+objects()
+#パッケージのインストールと読み込み
+#持ってないパッケージはインストールする
+targetPackages <- c('zoo', 'xts','Quandl',
+                    'quantmod','grid',"reshape2",'scales',
+                    'moments','xtable','gridExtra','snow',
+                    'parallel',"doParallel","gridExtra","tidyverse") 
+newPackages <- targetPackages[!(targetPackages %in% installed.packages()[,"Package"])]
+if(length(newPackages)) install.packages(newPackages, repos = "http://cran.us.r-project.org")
+for(package in targetPackages) library(package, character.only = T)
+```
+
+
+# 株価収益率の分析
+
+いい加減毎回一緒なんでplotなどは省略してます
+
+データの入力のみ
+
+```{r n225}
+#データの読み込み
+n225 <- read.csv("data/nky.csv",header=TRUE,skip=4)
+y <- NULL
+#終値(1日の最後の値段)を使う
+y$Close <- n225$PX_LAST
+#日付データをDate型に変換
+y$ymd <- as.POSIXct(n225$Date)
+#データフレームにする(行列の列に名前がついているもの)
+#ggplotはdata.frameのデータにしか使えないので注意
+df <-data.frame(dt=y$ymd, x=y$Close)
+#日経平均の対数収益率をplot
+df$log_x <- c(NA,diff(log(df$x))*100)
+```
+
+あと、パラメータ推定
+
+```{r MLE,fig.height=4}
+rt <- df$log_x[-1]
+rt <- rt[rt!=0]
+fit <- mle.dfas2(rt, ini=c(0, log(0.2), -0.2, 0.5))
+
+fit$par2
+```
+
+# 分布の関数
+
+関数化してしまった方が、便利だと思うので
+
+```{r}
+# 局度変換を伴うsinh-arcsinh(x)分布の平均，分散，歪度，尖度を計算する関数
+fas2.mu.sd<- function(par){
+  f1 <- function(x) x*dfas2(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  m1 <- integrate( f1, lower=-Inf, upper=Inf)$value
+  f2 <- function(x) (x-m1)^2*dfas2(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  v2 <- integrate( f2, lower=-Inf, upper=Inf)$value
+  return(c(m1,sqrt(v2))) 
+}
+
+dfas2_stand <- function(x, mu, sigma, lambda, delta){
+  mu.sd <- fas2.mu.sd(par = c(mu,sigma,lambda,delta))
+  dfas2(mu.sd[1] + mu.sd[2]*x, mu, sigma, lambda, delta)*mu.sd[2]
+}
+
+
+##多分、元の分布の標準偏差をいじれる分布が必要
+dfas2_stand_sd <- function(x, mu, sigma, lambda, delta, sd){
+  mu.sd <- fas2.mu.sd(par = c(mu,sigma,lambda,delta))
+  dfas2((mu.sd[1] + mu.sd[2]*x/sd), mu, sigma, lambda, delta)*mu.sd[2]/sd
+}
+
+plot1 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=fit$par2[1],sigma=fit$par2[2],
+                lambda=fit$par2[3],delta=fit$par2[4])
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2_stand,mu=fit$par2[1],sigma=fit$par2[2],
+                lambda=fit$par2[3],delta=fit$par2[4])
+plot3 <- sapply(c(seq(-5,5,by = 0.01)),dfas2_stand_sd,mu=fit$par2[1],sigma=fit$par2[2],
+                lambda=fit$par2[3],delta=fit$par2[4],sd=2)
+
+plot_d <- data.frame(plot1,plot2,plot3) %>% gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+
+
+```
+
+赤いのが元の分布、緑色のが基準化した分布、青いのが基準化した分布の標準偏差を2にした分布(多分GARCHで必要)です。
+
+念のため、基準化分布と標準偏差を弄った分布のモーメントを確認
+
+```{r}
+# 局度変換を伴うsinh-arcsinh(x)分布の平均，分散，歪度，尖度を計算する関数
+fas2stand.moment<- function(par){
+  f1 <- function(x) x*dfas2_stand(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  m1 <- integrate( f1, lower=-Inf, upper=Inf)$value
+  f2 <- function(x) (x-m1)^2*dfas2_stand(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])
+  v2 <- integrate( f2, lower=-Inf, upper=Inf)$value
+  f3 <- function(x) (x-m1)^3*dfas2_stand(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])/(v2^{3/2})
+  b1 <- integrate( f3, lower=-Inf, upper=Inf)$value
+  f4 <- function(x) (x-m1)^4*dfas2_stand(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4])/(v2^{2})
+  b2 <- integrate( f4, lower=-Inf, upper=Inf)$value
+  return(list(m1=m1, v2=v2,b1=b1, b2=b2)) 
+}
+
+fas2stand.moment(fit$par2)
+
+# 局度変換を伴うsinh-arcsinh(x)分布の平均，分散，歪度，尖度を計算する関数
+fas2standsd.moment<- function(par,sd){
+  f1 <- function(x) x*dfas2_stand_sd(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4],sd=sd)
+  m1 <- integrate( f1, lower=-Inf, upper=Inf)$value
+  f2 <- function(x) (x-m1)^2*dfas2_stand_sd(x, mu=par[1], sigma=par[2], lambda=par[3], delta=par[4],sd=2)
+  v2 <- integrate( f2, lower=-Inf, upper=Inf)$value
+  f3 <- function(x) (x-m1)^3*dfas2_stand_sd(x,
+                                            mu=par[1], sigma=par[2], lambda=par[3], delta=par[4],sd=2)/(v2^{3/2})
+  b1 <- integrate( f3, lower=-Inf, upper=Inf)$value
+  f4 <- function(x) (x-m1)^4*dfas2_stand_sd(x,
+                                            mu=par[1], sigma=par[2], lambda=par[3], delta=par[4],sd=2)/(v2^{2})
+  b2 <- integrate( f4, lower=-Inf, upper=Inf)$value
+  return(list(m1=m1, v2=v2,b1=b1, b2=b2)) 
+}
+fas2standsd.moment(fit$par2,2)
+```
+
+
+# GARCH
+
+今度こそGARCHに当てはめて見ます
+
+分布の書き方変です、すみません
+
+$$
+r_t = \sigma_t z_t \\ 
+z_t \sim F_{SAstand} \left(\theta \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2\\
+$$
+
+
+```{r,eval=FALSE}
+#何気に時間がかかるので実行結果を保存しておく
+
+tos_para <- c(mu = fit$par2[1], sigma = fit$par2[2], lambda = fit$par2[3], delta = fit$par2[4])
+#自作のGARCH
+my_fun_res <- garch_f_opt(df$log_x[-1], error = "ToS_stand",dis_para = tos_para)
+#分散の計算
+my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par, error = "ToS_stand",dis_para = tos_para)
+exp(my_fun_res$par)
+
+save(my_fun_res,file = "data/GARCH/only_garchpara.Rdata")
+```
+
+```{r}
+tos_para <- c(mu = fit$par2[1], sigma = fit$par2[2], lambda = fit$par2[3], delta = fit$par2[4])
+load("data/GARCH/only_garchpara.Rdata")
+my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par, error = "ToS_stand",dis_para = tos_para)
+exp(my_fun_res$par)
+```
+
+### Plot
+
+```{r}
+plot_d_tos  <- data.frame(dt = df$dt[-1],
+                my_fun_tos = my_fun_res2 %>% sqrt())
+
+ggplot(plot_d_tos %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+
+## $\lambda=0$として残りのパラメータも推定する
+
