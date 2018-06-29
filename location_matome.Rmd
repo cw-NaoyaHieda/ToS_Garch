@@ -1,0 +1,454 @@
+---
+title: "ロケーションシフトに関して"
+author: "Naoya Hieda"
+date: "2018-06-26"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    number_sections: yes
+    css: "toc.css"
+    code_folding: hide
+    toc_depth: 2
+    pandoc_args: [
+        "--from", "markdown+autolink_bare_uris+tex_math_single_backslash-implicit_figures"
+        ]
+editor_options: 
+  chunk_output_type: console
+---
+
+
+単純モンテカルロ法
+
+重点サンプリング
+
+重点サンプリング location_shift(VaRとES両方にsfift)
+
+の結果をまとめる
+
+ただし、Fsa分布のみ(正規分布までやると、ややこしいので)
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               fig.width=8,
+               fig.height=6)
+opts_knit$set(width=75)
+set.seed(2017)
+```
+
+
+```{r package}
+#実験で使う関数
+source("script/ToS_functions.R")
+source("script/functions_rolling.R")
+objects()
+#パッケージのインストールと読み込み
+#持ってないパッケージはインストールする
+targetPackages <- c('zoo', 'xts','Quandl',
+                    'quantmod','grid',"reshape2",'scales',
+                    'moments','xtable','gridExtra','snow',
+                    'parallel',"doParallel","gridExtra","tidyverse") 
+newPackages <- targetPackages[!(targetPackages %in% installed.packages()[,"Package"])]
+if(length(newPackages)) install.packages(newPackages, repos = "http://cran.us.r-project.org")
+for(package in targetPackages) library(package, character.only = T)
+```
+
+
+# 株価収益率の分析
+
+```{r n225}
+#データの読み込み
+n225 <- read.csv("data/nky.csv",header=TRUE,skip=4)
+y <- NULL
+#終値(1日の最後の値段)を使う
+y$Close <- n225$PX_LAST
+#日付データをDate型に変換
+y$ymd <- as.POSIXct(n225$Date)
+#データフレームにする(行列の列に名前がついているもの)
+#ggplotはdata.frameのデータにしか使えないので注意
+df <-data.frame(dt=y$ymd, x=y$Close)
+```
+
+## 日経225<br>平均株価指数の遷移
+
+```{r n225plot}
+#ggplotで日経平均株価をplot
+#ggplotの各関数の意味は自分で調べること
+ggplot(df,aes(x=dt,y=x))+geom_line()+
+        scale_x_datetime(breaks = date_breaks("6 months"))+
+        labs(x="Date",y="N225")+
+        theme_bw()
+
+```
+
+## 日経平均の<br>対数収益率の推移
+
+```{r n225logplot}
+#日経平均の対数収益率をplot
+df$log_x <- c(NA,diff(log(df$x))*100)
+ggplot(df[-1,],aes(dt,log_x))+geom_line()+
+        scale_x_datetime(breaks = date_breaks("6 months"))+
+        labs(x="Date",y="log return")+
+        theme_bw()+
+        theme(strip.background = element_blank(),
+              panel.border = element_rect(colour = "black"))
+```
+
+
+## 基礎統計量
+
+```{r fs}
+summary(df)
+dim(df)
+str(df)
+```
+
+# 結果をまとめる
+
+## 尺度変換した<br>sinh-arcsinh分布の<br>パラメータ推定
+
+```{r MLE,fig.height=4}
+rt <- df$log_x[-1]
+rt <- rt[rt!=0]
+fit <- mle.dfas2(rt, ini=c(0, log(0.2), -0.2, 0.5))
+
+fit$par2
+```
+
+
+## ヒストリカル?法
+
+```{r}
+#真値計算
+#99%,97.5%,95%の各点に対して，先ほどの関数を用いて求める
+VaR1.fa <- qfas(0.01, mu=fit$par2[1], sigma=fit$par2[2],
+                lambda=fit$par2[3], delta = fit$par2[4])
+VaR25.fa <- qfas(0.025, mu=fit$par2[1], sigma=fit$par2[2],
+                 lambda=fit$par2[3], delta = fit$par2[4])
+VaR5.fa <- qfas(0.05, mu=fit$par2[1], sigma=fit$par2[2],
+                lambda=fit$par2[3], delta = fit$par2[4])
+#まとめておく
+VaR.true.FA <- c(VaR1.fa ,VaR25.fa ,VaR5.fa )
+ES1.fa <- find.ES(p=0.01, par=fit$par2)
+ES25.fa <- find.ES(p=0.025, par=fit$par2)
+ES5.fa <- find.ES(p=0.05, par=fit$par2)
+#まとめる
+ES.true.FA <- c(ES1.fa ,ES25.fa ,ES5.fa )
+```
+
+
+## 単純モンテカルロ法
+
+```{r,eval=FALSE}
+cl <- makeCluster(detectCores()-1)
+cl_l <- length(cl)
+clusterExport(cl,list("s_inverse","dfas","dfas2","Cf","Sf","cl_l","fit","Resample1"))
+SMC.fa.out <- SMC.fa_para(fit$par2)
+
+SMC_VaR_1 <- SMC.fa.out[,c(seq(1,600,6))]
+SMC_VaR_25 <- SMC.fa.out[,c(seq(2,600,6))]
+SMC_VaR_5 <- SMC.fa.out[,c(seq(3,600,6))]
+SMC_ES_1 <- SMC.fa.out[,c(seq(4,600,6))]
+SMC_ES_25 <- SMC.fa.out[,c(seq(5,600,6))]
+SMC_ES_5 <- SMC.fa.out[,c(seq(6,600,6))]
+
+SMC_VaR_mean <- data.frame(rowMeans(SMC_VaR_1),rowMeans(SMC_VaR_25),rowMeans(SMC_VaR_5))
+SMC_VaR_sd <- data.frame(apply(SMC_VaR_1,1,sd),apply(SMC_VaR_25,1,sd),apply(SMC_VaR_5,1,sd))
+SMC_ES_mean <- data.frame(rowMeans(SMC_ES_1),rowMeans(SMC_ES_25),rowMeans(SMC_ES_5))
+SMC_ES_sd <- data.frame(apply(SMC_ES_1,1,sd),apply(SMC_ES_25,1,sd),apply(SMC_ES_5,1,sd))
+stopCluster(cl)
+save(list=c("SMC.fa.out","SMC_VaR_mean","SMC_VaR_sd","SMC_ES_mean","SMC_ES_sd"),
+     file="data/matomedata/SMC.Rdata")
+```
+
+## 重点サンプリング
+
+```{r,eval=FALSE}
+cl <- makeCluster(detectCores()-1)
+cl_l <- length(cl)
+clusterExport(cl,list("s_inverse","dfas","dfas2","Cf","Sf","cl_l","fit","Resample1"))
+
+## IS(重点サンプリング)による<br>VaRとESを計算
+# 99%,97.5%,95%それぞれのVaRと平均が一致するthetaを取得
+theta.val1<- find.theta(0.01, fit$par2)
+theta.val25<- find.theta(0.025, fit$par2)
+theta.val5<- find.theta(0.05, fit$par2)
+
+
+
+out.fa<-c()
+rfa.IS.1<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[1], theta=theta.val1)
+rfa.IS.25<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[2], theta=theta.val25)
+rfa.IS.5<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[3], theta=theta.val5)
+# サンプリングしたものを入力としてFA分布の重点サンプリングを行う
+rfa1 <- sample(rfa.IS.1$q, 10000)
+rfa25 <- sample(rfa.IS.25$q, 10000)
+rfa5 <- sample(rfa.IS.5$q, 10000)
+
+try(out.fa <- cbind(out.fa,IS.fa_gairon()))
+
+
+while(dim(out.fa)[2] < 601){
+  rfa.IS.1<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[1], theta=theta.val1)
+  rfa.IS.25<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[2], theta=theta.val25)
+  rfa.IS.5<-rIS_SIR(n=20000, par=fit$par2, par2=VaR.true.FA[3], theta=theta.val5)
+  # サンプリングしたものを入力としてFA分布の重点サンプリングを行う
+  rfa1 <- sample(rfa.IS.1$q, 10000)
+  rfa25 <- sample(rfa.IS.25$q, 10000)
+  rfa5 <- sample(rfa.IS.5$q, 10000)
+  clusterExport(cl,list("rfa1","rfa25","rfa5"))
+  try(out.fa <- cbind(out.fa,IS.fa_gairon()))
+  
+}
+
+
+
+stopCluster(cl)
+
+IS_VaR_1 <- out.fa[,c(seq(1,600,6))]
+IS_VaR_25 <- out.fa[,c(seq(2,600,6))]
+IS_VaR_5 <- out.fa[,c(seq(3,600,6))]
+IS_ES_1 <- out.fa[,c(seq(4,600,6))]
+IS_ES_25 <- out.fa[,c(seq(5,600,6))]
+IS_ES_5 <- out.fa[,c(seq(6,600,6))]
+
+IS_VaR_mean <- data.frame(rowMeans(IS_VaR_1),rowMeans(IS_VaR_25),rowMeans(IS_VaR_5))
+IS_VaR_sd <- data.frame(apply(IS_VaR_1,1,sd),apply(IS_VaR_25,1,sd),apply(IS_VaR_5,1,sd))
+IS_ES_mean <- data.frame(rowMeans(IS_ES_1),rowMeans(IS_ES_25),rowMeans(IS_ES_5))
+IS_ES_sd <- data.frame(apply(IS_ES_1,1,sd),apply(IS_ES_25,1,sd),apply(IS_ES_5,1,sd))
+
+save(list=c("out.fa","IS_VaR_mean","IS_VaR_sd","IS_ES_mean","IS_ES_sd"),
+     file="data/matomedata/IS.Rdata")
+```
+
+## ロケーションシフト?(パラメータのmuをVaRやES水準にする)
+ 
+
+
+
+## 表にまとめる
+
+N=1000での推定値とsdを並べる
+
+```{r}
+load("data/matomedata/SMC.Rdata")
+load("data/matomedata/IS.Rdata")
+load("data/check_mu_VaR.Rdata")
+load("data/check_mu_ES.Rdata")
+
+IS_VaR_1 <- out.fa[,c(seq(1,600,6))]
+IS_VaR_25 <- out.fa[,c(seq(3,600,6))]
+IS_VaR_5 <- out.fa[,c(seq(5,600,6))]
+IS_ES_1 <- out.fa[,c(seq(2,600,6))]
+IS_ES_25 <- out.fa[,c(seq(4,600,6))]
+IS_ES_5 <- out.fa[,c(seq(6,600,6))]
+
+
+IS_VaR_mean <- data.frame(rowMeans(IS_VaR_1),rowMeans(IS_VaR_25),rowMeans(IS_VaR_5))
+IS_VaR_sd <- data.frame(apply(IS_VaR_1,1,sd),apply(IS_VaR_25,1,sd),apply(IS_VaR_5,1,sd))
+IS_ES_mean <- data.frame(rowMeans(IS_ES_1),rowMeans(IS_ES_25),rowMeans(IS_ES_5))
+IS_ES_sd <- data.frame(apply(IS_ES_1,1,sd),apply(IS_ES_25,1,sd),apply(IS_ES_5,1,sd))
+
+df_mu_VaR$sd <- (df_mu_VaR$max - df_mu_VaR$value)/2
+df_mu_ES$sd <- (df_mu_ES$max - df_mu_ES$value)/2
+
+table_df_mu_VaR <- df_mu_VaR %>% filter(N == 1000)
+table_df_mu_ES <- df_mu_ES %>% filter(N == 1000)
+
+colnames(SMC_VaR_mean) <- c()
+colnames(SMC_ES_mean) <- c()
+S_V_mean1000 <- SMC_VaR_mean[1000,] 
+S_V_sd1000 <- SMC_VaR_sd[1000,]
+S_E_mean1000 <- SMC_ES_mean[1000,]
+S_E_sd1000 <- SMC_ES_sd[1000,]
+
+colnames(IS_VaR_mean) <- c()
+colnames(IS_ES_mean) <- c()
+I_V_mean1000 <- IS_VaR_mean[1000,]
+I_V_sd1000 <- IS_VaR_sd[1000,]
+I_E_mean1000 <- IS_ES_mean[1000,]
+I_E_sd1000 <- IS_ES_sd[1000,]
+
+ev_table1 <- matrix(rep(0,30),ncol=6)
+ev_table1[1,] <- c(-VaR.true.FA,-ES.true.FA)
+ev_table1[2,] <- cbind(S_V_mean1000,S_E_mean1000) %>% as.numeric() %>% abs()
+ev_table1[3,] <- cbind(I_V_mean1000,I_E_mean1000) %>% as.numeric() %>% abs()
+ev_table1[4,] <- table_df_mu_VaR[,3] %>% as.numeric()
+ev_table1[5,] <- table_df_mu_ES[,3] %>% as.numeric()
+
+ev_table2 <- matrix(rep(0,30),ncol=6)
+
+ev_table2[2,] <- cbind(S_V_sd1000,S_E_sd1000) %>% as.numeric() %>% abs()
+ev_table2[3,] <- cbind(I_V_sd1000,I_E_sd1000) %>% as.numeric() %>% abs()
+ev_table2[4,] <- table_df_mu_VaR[,6] %>% as.numeric()
+ev_table2[5,] <- table_df_mu_ES[,6] %>% as.numeric()
+
+
+colnames(ev_table1) <- colnames(ev_table2) <- c("VaR99","VaR97.5","VaR95","ES99","ES97.5","ES95")
+rownames(ev_table1) <- rownames(ev_table2) <- c("真値","SMC","IS","IS(location_VaR)","IS(location_ES)")
+
+ev_table1
+ev_table2
+
+```
+
+
+
+
+
+```{r}
+IS_VaR_plot_high <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+IS_VaR_plot_low <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+SV_VaR_plot_high <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+SV_VaR_plot_low <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+SV_ES_plot_high <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+SV_ES_plot_low <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+IS_ES_plot_high <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+IS_ES_plot_low <- matrix(0,ncol=3,nrow=9901) %>% data.frame()
+for(i in 1:3){
+  SV_VaR_plot_high[ , i] <- SMC_VaR_mean[ , i] + 2*SMC_VaR_sd[ , i] 
+  SV_VaR_plot_low[ , i] <- SMC_VaR_mean[ , i] - 2*SMC_VaR_sd[ , i] 
+  IS_VaR_plot_high[ , i] <- IS_VaR_mean[ , i] + 2*IS_VaR_sd[ , i] 
+  IS_VaR_plot_low[ , i] <- IS_VaR_mean[ , i] - 2*IS_VaR_sd[ , i] 
+  SV_ES_plot_high[ , i] <- SMC_ES_mean[ , i] + 2*SMC_ES_sd[ , i] 
+  SV_ES_plot_low[ , i] <- SMC_ES_mean[ , i] - 2*SMC_ES_sd[ , i] 
+  IS_ES_plot_high[ , i] <- IS_ES_mean[ , i] + 2*IS_ES_sd[ , i] 
+  IS_ES_plot_low[ , i] <- IS_ES_mean[ , i] - 2*IS_ES_sd[ , i] 
+}
+
+colnames(SMC_VaR_mean) <- colnames(SMC_ES_mean) <- colnames(IS_VaR_mean) <-
+  colnames(IS_ES_mean) <- c("99%","97.5%","95%") 
+
+colnames(IS_VaR_plot_high) <- colnames(IS_VaR_plot_low) <- colnames(SV_VaR_plot_high) <-
+colnames(SV_VaR_plot_low) <- colnames(SV_ES_plot_high) <- colnames(SV_ES_plot_low) <-
+colnames(IS_ES_plot_high) <- colnames(IS_ES_plot_low) <- c("99%","97.5%","95%") 
+
+p1 <- ggplot(data = SMC_VaR_mean %>% gather()) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+  theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
+                               min = SV_VaR_plot_low %>% gather() %>% select(value) %>% abs(),
+                               max = SV_VaR_plot_high %>% gather() %>% select(value) %>% abs(),
+                               fill= key
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("SMC") +
+  ylab("VaR") + xlab("N") + ylim(c(1,5.5))
+
+p2 <- ggplot(data = SMC_ES_mean %>% gather()) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+  theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
+                               min = SV_ES_plot_low %>% gather() %>% select(value)%>% abs(),
+                               max = SV_ES_plot_high %>% gather() %>% select(value)%>% abs(),
+                               fill= key
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("SMC") +
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+
+p3 <- ggplot(data = IS_VaR_mean %>% gather()) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+  theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
+                               min = IS_VaR_plot_low %>% gather() %>% select(value)%>% abs(),
+                               max = IS_VaR_plot_high %>% gather() %>% select(value)%>% abs(),
+                               fill= key
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS") +
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
+
+p4 <- ggplot(data = IS_ES_mean %>% gather()) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+  theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
+                               min = IS_ES_plot_low %>% gather() %>% select(value)%>% abs(),
+                               max = IS_ES_plot_high %>% gather() %>% select(value)%>% abs(),
+                               fill= key
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS") +
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+
+p5 <- ggplot(data = df_mu_VaR %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95")) + geom_path(
+                     aes(x = N,y=value,color=variable)) +
+  theme_bw() + geom_ribbon(aes(x = N,
+                               min = min,
+                               max = max,
+                               fill= variable
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
+
+p6 <- ggplot(data = df_mu_VaR %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95")) + geom_path(
+                     aes(x = N,y=value,color=variable)) +
+  theme_bw() + geom_ribbon(aes(x = N,
+                               min = min,
+                               max = max,
+                               fill= variable
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+
+p7 <- ggplot(data = df_mu_ES %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95")) + geom_path(
+                     aes(x = N,y=value,color=variable)) +
+  theme_bw() + geom_ribbon(aes(x = N,
+                               min = min,
+                               max = max,
+                               fill= variable
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
+
+p8 <- ggplot(data = df_mu_ES %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95")) + geom_path(
+                     aes(x = N,y=value,color=variable)) +
+  theme_bw() + geom_ribbon(aes(x = N,
+                               min = min,
+                               max = max,
+                               fill= variable
+                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="bottom",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+
+
+grid.arrange(p1, p3, p5, p7,
+             ncol = 2) 
+grid.arrange(p2, p4, p6, p8,
+             ncol = 2) 
+```
+
+

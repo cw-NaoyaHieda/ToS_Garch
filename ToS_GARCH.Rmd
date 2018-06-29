@@ -211,6 +211,12 @@ ggplot(plot_d_tos %>% gather(key=fun,value,-dt)) +
 
 パラメータに、ローリング推定の結果を用いる
 
+$$
+r_t = \sigma_t z_t \\ 
+z_t \sim F_{SAstand} \left(\theta_t \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2\\
+\theta_t \hspace{2mm}  RollingEstimates
+$$
 
 ```{r,eval=FALSE}
 load("data/20180530_rolling_result_useoldpara.Rdata")
@@ -259,14 +265,15 @@ result_para$dt <- df$dt[c(251:length(df$dt))]
 df_with_roll <- result_para %>% left_join(df,by = "dt")
 load(file = "data/GARCH/rolling.Rdata")
 #分散の計算
-my_fun_res2_roll <- garch_f(df$log_x[-1], my_fun_res$par, error = "ToS_stand",dis_para = df_with_roll)
+my_fun_res2_roll <- garch_f(df_with_roll$log_x, my_fun_res_roll$par,
+                            error = "ToS_stand",dis_para = df_with_roll)
 exp(my_fun_res_roll$par)
 ```
 
 ### Plot
 
 ```{r}
-plot_d_tos_roll  <- data.frame(dt = df$dt[-1],
+plot_d_tos_roll  <- data.frame(dt = result_para$dt,
                 my_fun_tos_roll = my_fun_res2_roll %>% sqrt())
 
 ggplot(plot_d_tos_roll %>% gather(key=fun,value,-dt)) + 
@@ -274,10 +281,490 @@ ggplot(plot_d_tos_roll %>% gather(key=fun,value,-dt)) +
   theme_bw()
 ```
 
-## $\lambda=0$として残りのパラメータも推定する
+## 分布のパラメータも推定する
+
+"分布が毎回変わって、平均分散が毎回変化するのでパラメータごとに数値積分が必要になってめんどくさいかもしれません。"  
+なので、$\lambda=0$としてという話でしたが、すでに上記のローリング推定を当てはめたバージョンでそれに対応していたので、そのままやってしまいました。
+
+
+```{r,eval=FALSE}
+my_fun_res_with_para <- garch_f_opt_with_para(df$log_x[-1])
+save(my_fun_res_with_para,file = "data/GARCH/with_ToSpara.Rdata")
+```
+
+
+
 
 ```{r}
+load(file = "data/GARCH/with_ToSpara.Rdata")
+exp(my_fun_res_with_para$par[1:3])
+
+garch_par2 <- c(my_fun_res_with_para$par[4],exp(my_fun_res_with_para$par[5]),
+                my_fun_res_with_para$par[6],my_fun_res_with_para$par[7])
+garch_par2
+```
+
+### Plot
+
+```{r}
+#分散の計算
+my_fun_res2_with_para <- garch_f(df$log_x[-1], my_fun_res_with_para$par[1:3],
+                            error = "ToS_stand")
+plot_d_tos_with_para  <- data.frame(dt = df$dt[-1],
+                my_fun_tos_with_para = my_fun_res2_with_para %>% sqrt())
+
+ggplot(plot_d_tos_with_para %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+
+```{r}
+plot1 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu=garch_par2[1],sigma=garch_par2[2],
+                lambda=garch_par2[3],delta=garch_par2[4])
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2_stand,mu=garch_par2[1],sigma=garch_par2[2],
+                lambda=garch_par2[3],delta=garch_par2[4])
+
+plot_d <- data.frame(plot1,plot2) %>% gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+```
+
+
+ちょっと元の分布で考えたときに変ですね・・・
+
+#  先生に言われた通りにやる
+
+## $\lambda=0$で固定
+
+```{r,eval=FALSE}
+my_fun_res_with_para2_lambda0 <- garch_f_opt_with_para2_lambda0(df$log_x[-1],tos_mu = fit$par2[1],tos_sigma = fit$par2[2])
+save(my_fun_res_with_para2_lambda0,file = "data/GARCH/with_ToSpara2_lambda0.Rdata")
+```
+
+```{r}
+load(file = "data/GARCH/with_ToSpara2_lambda0.Rdata")
+exp(my_fun_res_with_para2_lambda0$par[1:3])
+
+garch_par2 <- c(my_fun_res_with_para2_lambda0$par[4])
+garch_par2
+```
+
+
+### Plot
+
+```{r}
+#分散の計算
+my_fun_res2_with_para2_lambda0 <- garch_f(df$log_x[-1], my_fun_res_with_para2_lambda0$par[1:3],
+                            error = "ToS_stand")
+plot_d_tos_with_para2_lambda0  <- data.frame(dt = df$dt[-1],
+                my_fun_tos2_with_para2_lambda0 = my_fun_res2_with_para2_lambda0 %>% sqrt())
+
+ggplot(plot_d_tos_with_para2_lambda0 %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+```{r}
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2_stand,mu= fit$par2[1],sigma= fit$par2[2],
+                lambda=0,delta=garch_par2[1])
+
+plot_d <- data.frame(plot2) %>% gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+```
+
+
+
+## 両方推定する
+
+```{r,eval=FALSE}
+my_fun_res_with_para2 <- garch_f_opt_with_para2(df$log_x[-1],tos_mu = fit$par2[1],tos_sigma = fit$par2[2])
+save(my_fun_res_with_para2,file = "data/GARCH/with_ToSpara2.Rdata")
+```
+
+```{r}
+load(file = "data/GARCH/with_ToSpara2.Rdata")
+exp(my_fun_res_with_para2$par[1:3])
+
+garch_par2 <- c(my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5])
+garch_par2
+```
+
+
+### Plot
+
+```{r}
+#分散の計算
+my_fun_res2_with_para2 <- garch_f(df$log_x[-1], my_fun_res_with_para2$par[1:3],
+                            error = "ToS_stand")
+plot_d_tos_with_para2  <- data.frame(dt = df$dt[-1],
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2 %>% sqrt())
+
+ggplot(plot_d_tos_with_para2 %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+```{r}
+plot1 <- sapply(c(seq(-5,5,by = 0.01)),dfas2,mu= fit$par2[1],sigma= fit$par2[2],
+                lambda=garch_par2[1],delta=garch_par2[2])
+plot2 <- sapply(c(seq(-5,5,by = 0.01)),dfas2_stand,mu= fit$par2[1],sigma= fit$par2[2],
+                lambda=garch_par2[1],delta=garch_par2[2])
+
+plot_d <- data.frame(plot1,plot2) %>%
+  gather(key,value) %>% cbind(x=c(seq(-5,5,by=0.01)))
+ggplot(plot_d,aes(x=x,y=value,color=key))+geom_line() + theme_bw()
+```
+
+
+## $\mu$(平均を考慮した)ToS
+
+$$
+r_t = \mu + \sigma_t z_t \\ 
+z_t \sim F_{SAstand} \left(\theta \right) \\ 
+\sigma_t^2 = w + \sum_{i=0}^p \beta_i \sigma_{t-i}^2 + \sum_{j=1}^q \alpha_j \epsilon_{t-j}^2\\
+$$
+
+
+
+```{r,eval=FALSE}
+my_fun_res_with_para2_mues <- garch_f_opt_with_para2_muestimate(
+  df$log_x[-1],tos_mu = 0,tos_sigma = 1)
+
+my_fun_res_with_para2_mues$par
+save(my_fun_res_with_para2_mues,file = "data/GARCH/with_ToSpara2_muestimate.Rdata")
+```
+
+
+```{r}
+load(file = "data/GARCH/with_ToSpara2_muestimate.Rdata")
+exp(my_fun_res_with_para2_mues$par[1:3])
+
+garch_par2 <- c(my_fun_res_with_para2_mues$par[5],my_fun_res_with_para2_mues$par[6])
+garch_par2
+```
+
+
+### Plot
+
+```{r}
+#分散の計算
+my_fun_res2_with_para2 <- garch_f(df$log_x[-1], my_fun_res_with_para2_mues$par[1:3],
+                            error = "ToS_stand")+ my_fun_res_with_para2_mues$par[4]
+plot_d_tos_with_para2  <- data.frame(dt = df$dt[-1],
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2 %>% sqrt())
+
+ggplot(plot_d_tos_with_para2 %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  theme_bw()
+```
+
+
+
+# 各モデルでの推定結果まとめ
+
+```{r}
+#正規分布版の計算
+my_fun_res <- garch_f_opt(df$log_x[-1])
+my_fun_res_mu <- garch_f_opt_with_para_norm(df$log_x[-1])
+#aic関数
+calc_aic <- function(Se,n,p){
+  sapply(Se,function(x) n( log(2*pi*x/n) + 1) + 2 * (p + 2)) %>% sum()
+}
+
+```
+
+## 各推定値など
+
+```{r}
+eval_matrix <- matrix(0, ncol=7, nrow = 4)
+colnames(eval_matrix) <- c("LLH",expression(alpha_1),
+                           expression(beta_0),expression(beta_1),expression(mu),
+                           expression(lambda),expression(delta))
+rownames(eval_matrix) <- c(expression(sigma * norm),expression(sigma * ToS),
+                           expression(mu + sigma * norm),expression(mu + sigma * ToS))
+
+eval_matrix[,"LLH"] <- c(-my_fun_res$value,-my_fun_res_with_para2$value,
+                         -my_fun_res_mu$value,-my_fun_res_with_para2_mues$value)
+eval_matrix[1,] <- c(-my_fun_res$value,exp(my_fun_res$par),0,0,0)
+eval_matrix[2,] <- c(-my_fun_res_with_para2$value,exp(my_fun_res_with_para2$par[1:3]),
+                     0,my_fun_res_with_para2$par[4:5])
+eval_matrix[3,] <- c(-my_fun_res_mu$value,exp(my_fun_res_mu$par[1:3]),
+                     my_fun_res_mu$par[4],0,0)
+
+eval_matrix[4,] <- c(-my_fun_res_with_para2_mues$value,exp(my_fun_res_with_para2_mues$par[1:3]),
+                     my_fun_res_with_para2_mues$par[4:6])
+eval_matrix
+```
+
+## plot
+
+$\sigma$の挙動確認
+
+```{r}
+my_fun_res2 <- garch_f(df$log_x[-1], my_fun_res$par)
+my_fun_res2_with_para2 <- garch_f(df$log_x[-1], my_fun_res_with_para2$par[1:3],
+                            error = "ToS_stand")
+plot_d  <- data.frame(dt = df$dt[-1],
+                                     my_fun_res2 = my_fun_res2 %>% sqrt(),
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2 %>% sqrt())
+
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "関数", labels = c(expression(sigma * norm),expression(sigma * ToS)))+
+  theme_bw() 
+
+```
+
+```{r}
+my_fun_res2_mu <- garch_f(df$log_x[-1], my_fun_res_mu$par[1:3]) + my_fun_res_mu$par[4]
+my_fun_res2_with_para2_mu <- garch_f(df$log_x[-1], my_fun_res_with_para2_mues$par[1:3],
+                            error = "ToS_stand") + my_fun_res_with_para2_mues$par[4]
+plot_d  <- data.frame(dt = df$dt[-1],
+                                     my_fun_res2 = my_fun_res2_mu %>% sqrt(),
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2_mu %>% sqrt())
+
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "関数", labels = c(expression(mu + sigma * norm),expression(mu + sigma * ToS)))+
+  theme_bw() 
+
+plot_d  <- data.frame(dt = df$dt[-1],
+                                     my_fun_res2 = my_fun_res2 %>% sqrt(),
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2 %>% sqrt(),
+                my_fun_res2_mu = my_fun_res2_mu %>% sqrt(),
+                my_fun_tos2_with_para2_mu = my_fun_res2_with_para2_mu %>% sqrt())
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "関数", labels = c(expression(sigma * norm),expression(sigma * ToS),
+    expression(mu + sigma * norm),expression(mu + sigma * ToS)))+
+  theme_bw() 
 
 ```
 
 
+## VaRを求めてみる
+
+
+```{r}
+#局度変換を伴うsinh-arcsinh分布の確率分布関数
+pfa2_ssd <- function(x, mu, sigma, lambda, delta, sd){
+  f <- function(y) dfas2_stand_sd(y, mu, sigma, lambda, delta, sd)
+  return( integrate( f, lower=-Inf, upper=x)$value)
+}
+#局度変換を伴うsinh-arcsinh分布の 分位点関数
+qfas_ssd <-function(p, mu, sigma, lambda, delta, sd){
+  eps=0.001
+  f <- function(x) return( pfa2_ssd(x,  mu, sigma, lambda, delta, sd) -p)
+  uniroot(f, interval=c(-10,10),extendInt="yes", trace=1)$root
+}
+```
+
+
+```{r,eval=FALSE}
+tos_var95 <- sapply(my_fun_res2_with_para2 %>% sqrt(), 
+                             function(x) qfas_ssd(0.95, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+tos_var975 <- sapply(my_fun_res2_with_para2 %>% sqrt(), 
+                             function(x) qfas_ssd(0.975, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+tos_var99 <- sapply(my_fun_res2_with_para2 %>% sqrt(), 
+                             function(x) qfas_ssd(0.99, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+
+tos_var95mu <- sapply(my_fun_res2_with_para2_mu %>% sqrt(), 
+                             function(x) qfas_ssd(0.95, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x) + 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var975mu <- sapply(my_fun_res2_with_para2_mu %>% sqrt(), 
+                             function(x) qfas_ssd(0.975, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x)+ 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var99mu <- sapply(my_fun_res2_with_para2_mu %>% sqrt(), 
+                             function(x) qfas_ssd(0.99, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x)+ 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var <- data.frame(tos_var95, tos_var975, tos_var99, tos_var95mu, tos_var975mu, tos_var99mu)
+save(tos_var,file = "data/GARCH/tos_garch_var.Rdata")
+```
+
+
+```{r}
+load("data/GARCH/tos_garch_var.Rdata")
+plot_d  <- data.frame(dt = df$dt[-1],-tos_var[,c(1,4)],
+                      my_fun_res2 = -1.96*(my_fun_res2 %>% sqrt()),
+                      my_fun_res2_mu = -1.96*(my_fun_res2_mu %>% sqrt() +
+                                                my_fun_res_mu$par[4]))
+
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_path(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "関数", labels = c(expression(sigma * ToS),
+                                          expression(mu + sigma * ToS),
+                                          expression(sigma * norm),
+                                          expression(mu + sigma * norm)))+
+  theme_bw() + ggtitle("VaR95%")
+```
+
+### 評価
+
+```{r}
+var95 <- data.frame(dt = df$dt[-1],-tos_var[,c(1,4)],
+           norm_var95=-1.64*(my_fun_res2 %>% sqrt()),
+           norm_var95mu=-1.64*(my_fun_res2_mu %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(df$log_x[-1], var95[,-1])
+var95eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var95eval <- colSums(var95eval) / dim(ev)[1]
+
+var975 <- data.frame(dt = df$dt[-1],-tos_var[,c(2,5)],
+           norm_var95=-1.96*(my_fun_res2 %>% sqrt()),
+           norm_var95mu=-1.96*(my_fun_res2_mu %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(df$log_x[-1], var975[,-1])
+var975eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var975eval <- colSums(var975eval) / dim(ev)[1]
+
+var99 <- data.frame(dt = df$dt[-1],-tos_var[,c(3,6)],
+           norm_var95=-2.33*(my_fun_res2 %>% sqrt()),
+           norm_var95mu=-2.33*(my_fun_res2_mu %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(df$log_x[-1], var99[,-1])
+var99eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var99eval <- colSums(var99eval) / dim(ev)[1]
+
+eval_matrix <- matrix(0,ncol=4,nrow=3)
+colnames(eval_matrix) <- c("tos","tos_mu","norm","norm_mu")
+rownames(eval_matrix) <- c("VaR95","VaR97.5","VaR99")
+eval_matrix[1,] <- var95eval
+eval_matrix[2,] <- var975eval
+eval_matrix[3,] <- var99eval
+eval_matrix
+```
+
+# 予測してみる
+
+多分、毎日GARCHパラメータと分布のパラメータを更新した方がいいと思うのですが  
+多分、かなり時間がかかるので、とりあえず更新せずに作ります。
+
+```{r}
+n225_2018 <- read.csv("data/nky2018.csv",header=TRUE)
+y2018 <- NULL
+#終値(1日の最後の値段)を使う
+y2018$Close <- n225_2018$NKY.Index
+#日付データをDate型に変換
+y2018$ymd <- as.POSIXct(n225_2018$Date)
+#データフレームにする(行列の列に名前がついているもの)
+#ggplotはdata.frameのデータにしか使えないので注意
+df2018 <-data.frame(dt=y2018$ymd, x=y2018$Close)
+#日経平均の対数収益率をplot
+df2018$log_x <- c(NA,diff(log(df2018$x))*100)
+```
+
+
+```{r}
+df_tr_te_set <- rbind(df, df2018)
+df_tr_te_set$log_x <- c(NA,diff(log(df_tr_te_set$x))*100)
+
+my_fun_res2_pre <- garch_f(df_tr_te_set$log_x[-1], my_fun_res$par)
+my_fun_res2_mu_pre <- garch_f(df_tr_te_set$log_x[-1], my_fun_res_mu$par[1:3])
+
+my_fun_res2_with_para2_pre <- garch_f(df_tr_te_set$log_x[-1],
+                                  my_fun_res_with_para2$par[1:3],
+                                  error = "ToS_stand")
+my_fun_res2_with_para2_mues_pre <- garch_f(df_tr_te_set$log_x[-1],
+                                  my_fun_res_with_para2_mues$par[1:3],
+                                  error = "ToS_stand") +
+  my_fun_res_with_para2_mues$par[4]
+
+plot_d  <- data.frame(dt = df_tr_te_set$dt[-1],
+                                     my_fun_res2 = my_fun_res2_pre %>% sqrt(),
+                my_fun_tos2_with_para2 = my_fun_res2_with_para2_pre %>% sqrt(),
+                my_fun_res2_mu = my_fun_res2_mu_pre %>% sqrt(),
+                my_fun_tos2_with_para2_mu = my_fun_res2_with_para2_mues_pre %>% sqrt())
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_line(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "関数", labels = c(expression(sigma * norm),expression(sigma * ToS),
+    expression(mu + sigma * norm),expression(mu + sigma * ToS)))+
+  theme_bw() 
+
+```
+
+
+```{r,eval=FALSE}
+tos_var95 <- sapply(my_fun_res2_with_para2_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.95, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+tos_var975 <- sapply(my_fun_res2_with_para2_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.975, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+tos_var99 <- sapply(my_fun_res2_with_para2_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.99, 0, 1,
+                              my_fun_res_with_para2$par[4],my_fun_res_with_para2$par[5],x))
+
+tos_var95mu <- sapply(my_fun_res2_with_para2_mues_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.95, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x) + 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var975mu <- sapply(my_fun_res2_with_para2_mues_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.975, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x)+ 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var99mu <- sapply(my_fun_res2_with_para2_mues_pre %>% sqrt(), 
+                             function(x) qfas_ssd(0.99, 0, 1,
+                              my_fun_res_with_para2_mues$par[5],
+                              my_fun_res_with_para2_mues$par[6],x)+ 
+                               my_fun_res_with_para2_mues$par[4])
+tos_var2 <- data.frame(tos_var95, tos_var975, tos_var99, tos_var95mu, tos_var975mu, tos_var99mu)
+save(tos_var2,file = "data/GARCH/tos_garch_var2.Rdata")
+```
+
+
+```{r}
+load("data/GARCH/tos_garch_var2.Rdata")
+var95 <- data.frame(dt = df_tr_te_set$dt[-1],
+                    -tos_var2[,c(1,4)],
+           norm_var95=-1.64*(my_fun_res2_pre %>% sqrt()),
+           norm_var95mu=-1.64*(my_fun_res2_mu_pre %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(dt=df_tr_te_set$dt[-1],df_tr_te_set$log_x[-1], var95[,-1])
+ev <- ev %>% filter(dt >  as.POSIXct("2017-12-31"))
+ev <- ev[,-1]
+var95eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var95eval <- colSums(var95eval) / dim(ev)[1]
+
+var975 <- data.frame(dt = df_tr_te_set$dt[-1],-tos_var2[,c(2,5)],
+           norm_var95=-1.96*(my_fun_res2_pre %>% sqrt()),
+           norm_var95mu=-1.96*(my_fun_res2_mu_pre %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(df_tr_te_set[-1,c("dt","log_x")], var975[,-1])
+ev <- ev %>% filter(dt >  as.POSIXct("2017-12-31"))
+ev <- ev[,-1]
+var975eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var975eval <- colSums(var975eval) / dim(ev)[1]
+
+var99 <- data.frame(dt = df_tr_te_set$dt[-1],-tos_var2[,c(3,6)],
+           norm_var95=-2.33*(my_fun_res2_pre %>% sqrt()),
+           norm_var95mu=-2.33*(my_fun_res2_mu_pre %>% sqrt() + my_fun_res_mu$par[4]))
+
+ev <- data.frame(df_tr_te_set[-1,c("dt","log_x")], var99[,-1])
+ev <- ev[,-1]
+var99eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var99eval <- colSums(var99eval) / dim(ev)[1]
+
+eval_matrix <- matrix(0,ncol=4,nrow=3)
+colnames(eval_matrix) <- c("tos","tos_mu","norm","norm_mu")
+rownames(eval_matrix) <- c("VaR95","VaR97.5","VaR99")
+eval_matrix[1,] <- var95eval
+eval_matrix[2,] <- var975eval
+eval_matrix[3,] <- var99eval
+eval_matrix
+```
