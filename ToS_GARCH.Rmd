@@ -178,7 +178,6 @@ $$
 
 ```{r,eval=FALSE}
 #何気に時間がかかるので実行結果を保存しておく
-
 tos_para <- c(mu = fit$par2[1], sigma = fit$par2[2], lambda = fit$par2[3], delta = fit$par2[4])
 #自作のGARCH
 my_fun_res <- garch_f_opt(df$log_x[-1], error = "ToS_stand",dis_para = tos_para)
@@ -431,6 +430,7 @@ my_fun_res_with_para2_mues <- garch_f_opt_with_para2_muestimate(
   df$log_x[-1],tos_mu = 0,tos_sigma = 1)
 
 my_fun_res_with_para2_mues$par
+my_fun_res_with_para2_mues$par
 save(my_fun_res_with_para2_mues,file = "data/GARCH/with_ToSpara2_muestimate.Rdata")
 ```
 
@@ -508,12 +508,26 @@ plot_d  <- data.frame(dt = df$dt[-1],
                                      my_fun_res2 = my_fun_res2 %>% sqrt(),
                 my_fun_tos2_with_para2 = my_fun_res2_with_para2 %>% sqrt())
 
-
-ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
-  geom_line(aes(x = dt, y= value,color=fun)) +
-  scale_color_hue(name = "関数", labels = c(expression(sigma * norm),expression(sigma * ToS)))+
+second_rate <- 20000
+ggplot() + 
+  geom_line(data = plot_d %>% gather(key=fun,value,-dt),aes(x = dt, y= value,color=fun)) +
   theme_bw() 
 
+second_rate <- 10000
+ggplot() + 
+  geom_line(data = plot_d %>% gather(key=fun,value,-dt),
+            aes(x = dt, y= value*second_rate,color=fun)) +
+  ylab("value") +
+  scale_color_hue(name = "", labels = c(expression(Norm),expression(ToS)))+
+  scale_y_continuous(
+    limits = c(3000, 25000),
+    sec.axis = sec_axis(~ . / second_rate, name = expression(sigma))
+  )+
+  geom_path(aes(x=df$dt[-1],y=df$x[-1])) +
+  theme_bw() +
+  theme(axis.title.x = element_text(size=25),axis.title.y = element_text(size=25))+
+  theme(axis.text.x = element_text(size=25),axis.text.y = element_text(size=25)) +
+  theme(legend.title = element_text(size=25),legend.text = element_text(size=25))
 ```
 
 ```{r}
@@ -527,7 +541,7 @@ plot_d  <- data.frame(dt = df$dt[-1],
 
 ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
   geom_line(aes(x = dt, y= value,color=fun)) +
-  scale_color_hue(name = "関数", labels = c(expression(mu + sigma * norm),expression(mu + sigma * ToS)))+
+  scale_color_hue(name = "関数", labels = c(expression(Norm),expression(ToS)))+
   theme_bw() 
 
 plot_d  <- data.frame(dt = df$dt[-1],
@@ -536,11 +550,22 @@ plot_d  <- data.frame(dt = df$dt[-1],
                 my_fun_res2_mu = my_fun_res2_mu %>% sqrt(),
                 my_fun_tos2_with_para2_mu = my_fun_res2_with_para2_mu %>% sqrt())
 
-ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
-  geom_line(aes(x = dt, y= value,color=fun)) +
-  scale_color_hue(name = "関数", labels = c(expression(sigma * norm),expression(sigma * ToS),
+second_rate = 5000
+ggplot() + 
+  geom_line(data = plot_d %>% gather(key=fun,value,-dt),
+            aes(x = dt, y= value*second_rate,color=fun)) +
+  ylab("value") +
+  scale_color_hue(name = "", labels = c(expression(sigma * norm),expression(sigma * ToS),
     expression(mu + sigma * norm),expression(mu + sigma * ToS)))+
-  theme_bw() 
+  scale_y_continuous(
+    limits = c(3000, 25000),
+    sec.axis = sec_axis(~ . / second_rate, name = expression(sigma))
+  )+
+  geom_path(aes(x=df$dt[-1],y=df$x[-1])) +
+  theme_bw() +
+  theme(axis.title.x = element_text(size=25),axis.title.y = element_text(size=25))+
+  theme(axis.text.x = element_text(size=25),axis.text.y = element_text(size=25)) +
+  theme(legend.title = element_text(size=25),legend.text = element_text(size=25))
 
 ```
 
@@ -590,13 +615,13 @@ tos_var99mu <- sapply(my_fun_res2_with_para2_mu %>% sqrt(),
                               my_fun_res_with_para2_mues$par[6],x)+ 
                                my_fun_res_with_para2_mues$par[4])
 tos_var <- data.frame(tos_var95, tos_var975, tos_var99, tos_var95mu, tos_var975mu, tos_var99mu)
-save(tos_var,file = "data/GARCH/tos_garch_var.Rdata")
+#save(tos_var,file = "data/GARCH/tos_garch_var.Rdata")
 ```
 
 
 ```{r}
 load("data/GARCH/tos_garch_var.Rdata")
-plot_d  <- data.frame(dt = df$dt[-1],-tos_var[,c(1,4)],
+plot_d  <- data.frame(dt = df$dt[-1],-tos_var[,c(2,5)],
                       my_fun_res2 = -1.96*(my_fun_res2 %>% sqrt()),
                       my_fun_res2_mu = -1.96*(my_fun_res2_mu %>% sqrt() +
                                                 my_fun_res_mu$par[4]))
@@ -604,11 +629,25 @@ plot_d  <- data.frame(dt = df$dt[-1],-tos_var[,c(1,4)],
 
 ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
   geom_path(aes(x = dt, y= value,color=fun)) +
-  scale_color_hue(name = "関数", labels = c(expression(sigma * ToS),
+  scale_color_hue(name = "", labels = c(expression(sigma * ToS),
                                           expression(mu + sigma * ToS),
                                           expression(sigma * norm),
                                           expression(mu + sigma * norm)))+
-  theme_bw() + ggtitle("VaR95%")
+  theme_bw() + ggtitle("VaR97.5%")
+
+plot_d  <- data.frame(dt = df$dt[-1],-tos_var[,c(3,6)],
+                      my_fun_res2 = -2.33*(my_fun_res2 %>% sqrt()),
+                      my_fun_res2_mu = -2.33*(my_fun_res2_mu %>% sqrt() +
+                                                my_fun_res_mu$par[4]))
+
+
+ggplot(plot_d %>% gather(key=fun,value,-dt)) + 
+  geom_path(aes(x = dt, y= value,color=fun)) +
+  scale_color_hue(name = "", labels = c(expression(sigma * ToS),
+                                          expression(mu + sigma * ToS),
+                                          expression(sigma * norm),
+                                          expression(mu + sigma * norm)))+
+  theme_bw() + ggtitle("VaR99%")
 ```
 
 ### 評価
@@ -627,16 +666,16 @@ var975 <- data.frame(dt = df$dt[-1],-tos_var[,c(2,5)],
            norm_var95mu=-1.96*(my_fun_res2_mu %>% sqrt() + my_fun_res_mu$par[4]))
 
 ev <- data.frame(df$log_x[-1], var975[,-1])
-var975eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
-var975eval <- colSums(var975eval) / dim(ev)[1]
+var975eval_ <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var975eval <- colSums(var975eval_) / dim(ev)[1]
 
 var99 <- data.frame(dt = df$dt[-1],-tos_var[,c(3,6)],
            norm_var95=-2.33*(my_fun_res2 %>% sqrt()),
            norm_var95mu=-2.33*(my_fun_res2_mu %>% sqrt() + my_fun_res_mu$par[4]))
 
 ev <- data.frame(df$log_x[-1], var99[,-1])
-var99eval <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
-var99eval <- colSums(var99eval) / dim(ev)[1]
+var99eval_ <- apply(ev, 1, function(x) x[1] < x[c(2,3,4,5)]) %>% t()
+var99eval <- colSums(var99eval_) / dim(ev)[1]
 
 eval_matrix <- matrix(0,ncol=4,nrow=3)
 colnames(eval_matrix) <- c("tos","tos_mu","norm","norm_mu")
@@ -645,6 +684,16 @@ eval_matrix[1,] <- var95eval
 eval_matrix[2,] <- var975eval
 eval_matrix[3,] <- var99eval
 eval_matrix
+
+
+ev_ <- apply(ev,1,function(x) (x[1])/x[2:5] -1) %>% t()
+
+ev99 <- var99eval_ *  ev_
+colSums(ev99)/(length(df$log_x)*0.01)
+
+ev975 <- var975eval_ *  ev_
+colSums(ev975)/(length(df$log_x)*0.025)
+
 ```
 
 # 予測してみる
@@ -767,4 +816,137 @@ eval_matrix[1,] <- var95eval
 eval_matrix[2,] <- var975eval
 eval_matrix[3,] <- var99eval
 eval_matrix
+```
+
+
+## 前日$\hat{e}$について
+
+$$
+r_t =\mu + \sigma_t z_t \\
+z_t \sim F_{SAstand} \left(\theta \right) \\
+\sigma_t^2 =\alpha_0 + \alpha_1 (r_{t-1}-\mu)^2 + \beta_1\sigma_{t-1}^2
+$$
+
+$$
+\hat{e}= (y-\hat{\mu})/\hat{\alpha}_0+\hat{\alpha}_1(y-\mu)^2+ \hat{\beta}_1\sigma_{t-1}^2
+$$
+
+
+```{r}
+load(file = "data/GARCH/with_ToSpara2_muestimate.Rdata")
+
+garch_f_opt_with_para2_muestimate <- function(data, order = c(1, 1), tos_mu, tos_sigma){
+  t <- length(data)
+  sigma_t <- rep(0, t)
+  garch_loglik <- rep(0, t)
+  #GARCHのbeta
+  G_beta <- order[1]
+  #GARCHのalpha
+  G_alpha <- order[2]
+  params <- rep(0,c(G_beta + G_alpha + 1 +1 + 2))
+  params_len <- length(params)
+  params[c(params_len-1,params_len)] <- c(-0.2, 0.5)
+  params[c(params_len-2)] <- 0.03
+  # garchモデルの対数尤度を計算する関数(FA分布版)  
+  garch_op_ToS_stand <- function(params){
+    tos_lambda <- params[params_len - 1]
+    tos_delta <- params[params_len]
+    #sigma_tの計算
+    #計算できないところまでは、仮に推定してるsigmaを与える
+    for(i in 1:G_beta){
+      #sigma_t[i] <- sum(data^2)/t
+      # ToS のsigma!=標準偏差なので
+      sigma_t[i] <- sum(data^2)/t
+      garch_loglik[i] <- log(dfas2_stand_sd((data[i] - params[params_len - 2]),
+                                            delta=tos_delta,mu=tos_mu,sigma=tos_sigma,
+                                            lambda=tos_lambda,sd=sigma_t[i]%>% sqrt()))
+    }
+    for(i in (G_beta+1):t){
+      sigma_t[i] <- exp(params[1]) +
+        exp(params[2:(G_beta+1)]) * sigma_t[(i-G_beta):(i-1)] +
+        exp(params[(G_beta+2):(G_beta+G_alpha+1)]) * ((data[(i-G_alpha):(i-1)] - params[params_len - 2])^2)
+      garch_loglik[i] <- log(dfas2_stand_sd( (data[i] - params[params_len - 2]), delta=tos_delta,mu=tos_mu,sigma=tos_sigma,
+                                             lambda=tos_lambda,sd=sigma_t[i]%>% sqrt()))
+    }
+    return(-sum(garch_loglik))
+  }
+  
+  out <- optim(params, garch_op_ToS_stand)
+  
+  out
+}
+
+my_fun_res_with_para2_mues <- garch_f_opt_with_para2_muestimate(
+  df$log_x[-1],tos_mu = 0,tos_sigma = 1)
+garch_f_opt_with_para_norm<- function(data, order = c(1, 1), tos_mu, tos_sigma){
+  t <- length(data)
+  sigma_t <- rep(0, t)
+  garch_loglik <- rep(0, t)
+  #GARCHのbeta
+  G_beta <- order[1]
+  #GARCHのalpha
+  G_alpha <- order[2]
+  params <- rep(0.2,c(G_beta + G_alpha + 1 + 1))
+  params_len <- length(params)
+  # garchモデルの対数尤度を計算する関数(FA分布版)  
+  garch_op <- function(params){
+    #sigma_tの計算
+    #計算できないところまでは、全体のボラティリティを与える
+    for(i in 1:G_beta){
+      sigma_t[i] <- sum(data^2)/t
+      garch_loglik[i] <- log(dnorm(data[i], mean = params[params_len], sd = sqrt(sigma_t[i])))
+    }
+    for(i in (G_beta+1):t){
+      sigma_t[i] <- exp(params[1]) +
+        exp(params[2:(G_beta+1)]) * sigma_t[(i-G_beta):(i-1)] +
+        exp(params[(G_beta+2):(G_beta+G_alpha+1)]) * (data[(i-G_alpha):(i-1)]-params[params_len])^2
+      garch_loglik[i] <- log(dnorm(data[i], mean = params[params_len], sd = sqrt(sigma_t[i])))
+    }
+    return(-sum(garch_loglik))
+  }
+  
+  out <- optim(params, garch_op)
+  
+  out
+}
+
+exp(my_fun_res_with_para2_mues$par[1:3])
+my_fun_res_mu <- garch_f_opt_with_para_norm(df$log_x[-1])
+exp(my_fun_res_mu$par[1:3])
+my_fun_res2_mu <- garch_f_mu(df$log_x[-1],
+                            params = my_fun_res_mu$par[1:3],
+                             mu=my_fun_res_mu$par[4]) %>% sqrt()  
+my_fun_res2_with_para2_mu <- garch_f_mu(df$log_x[-1],
+                                     para=my_fun_res_with_para2_mues$par[1:3],
+                                     mu=my_fun_res_with_para2_mues$par[4],
+                            error = "ToS_stand") %>% sqrt()
+length(df$log_x)
+
+e1 <- (df$log_x[c(-1,-2)] - my_fun_res_mu$par[4])/(exp(my_fun_res_mu$par[1]) +
+  exp(my_fun_res_mu$par[3])*(df$log_x[c(-1,-length(df$log_x))] - my_fun_res_mu$par[4])^2 +
+  exp(my_fun_res_mu$par[2])*my_fun_res2_mu[c(-length(df$log_x)+1,-length(df$log_x))]^2)
+mean(e1)
+sd(e1)
+
+
+
+e2 <- (df$log_x[c(-1,-2)] - my_fun_res_with_para2_mues$par[4])/
+  (exp(my_fun_res_with_para2_mues$par[1]) +
+  exp(my_fun_res_with_para2_mues$par[3])*(df$log_x[c(-1,-length(df$log_x))] -
+                                            my_fun_res_with_para2_mues$par[4])^2 +
+  exp(my_fun_res_with_para2_mues$par[2])*
+    my_fun_res2_with_para2_mu[c(-length(df$log_x)+1,-length(df$log_x))]^2)
+
+mean(e2)
+sd(e2)
+
+
+
+ggplot()+
+  geom_histogram(data=data.frame(e1,t="N"),aes(x=e1,fill="N"))+
+  geom_histogram(data=data.frame(e2,t="ToS"),aes(x=e2,fill="ToS"))+
+  theme_bw()+
+  xlab("e")+
+  theme(legend.title = element_blank())+
+  facet_grid(t~.)
 ```
