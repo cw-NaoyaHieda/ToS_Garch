@@ -302,7 +302,7 @@ ev_table2
 ```
 
 
-
+### plot
 
 
 ```{r}
@@ -332,117 +332,125 @@ colnames(IS_VaR_plot_high) <- colnames(IS_VaR_plot_low) <- colnames(SV_VaR_plot_
 colnames(SV_VaR_plot_low) <- colnames(SV_ES_plot_high) <- colnames(SV_ES_plot_low) <-
 colnames(IS_ES_plot_high) <- colnames(IS_ES_plot_low) <- c("99%","97.5%","95%") 
 
-p1 <- ggplot(data = SMC_VaR_mean %>% gather()) + geom_path(
-                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+p1 <- ggplot(data = SMC_VaR_mean %>% gather()) +
   theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
                                min = SV_VaR_plot_low %>% gather() %>% select(value) %>% abs(),
                                max = SV_VaR_plot_high %>% gather() %>% select(value) %>% abs(),
                                fill= key
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               )) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) + theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
-    legend.title=element_blank(),legend.position="bottom",
+    legend.title=element_blank(),legend.position="none",
     legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("SMC") +
-  ylab("VaR") + xlab("N") + ylim(c(1,5.5))
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) + ylab("VaR") + xlab("N") + ylim(c(1,5.5))
 
-p2 <- ggplot(data = SMC_ES_mean %>% gather()) + geom_path(
-                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+
+p2 <- ggplot(data = SMC_ES_mean %>% gather())  +
   theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
                                min = SV_ES_plot_low %>% gather() %>% select(value)%>% abs(),
                                max = SV_ES_plot_high %>% gather() %>% select(value)%>% abs(),
                                fill= key
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               )) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key))+ theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
-    legend.title=element_blank(),legend.position="bottom",
+    legend.title=element_blank(),legend.position="none",
     legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("SMC") +
-  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
-p3 <- ggplot(data = IS_VaR_mean %>% gather()) + geom_path(
-                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+p3 <- ggplot(data = IS_VaR_mean %>% gather())  +
   theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
                                min = IS_VaR_plot_low %>% gather() %>% select(value)%>% abs(),
                                max = IS_VaR_plot_high %>% gather() %>% select(value)%>% abs(),
                                fill= key
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               )) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key))+ theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
-    legend.title=element_blank(),legend.position="bottom",
+    legend.title=element_blank(),legend.position="none",
     legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS") +
-  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
-p4 <- ggplot(data = IS_ES_mean %>% gather()) + geom_path(
-                     aes(x = rep(c(100:10000),3),y=-value,color=key)) +
+p4 <- ggplot(data = IS_ES_mean %>% gather())  +
   theme_bw() + geom_ribbon(aes(x = rep(c(100:10000), 3),
                                min = IS_ES_plot_low %>% gather() %>% select(value)%>% abs(),
                                max = IS_ES_plot_high %>% gather() %>% select(value)%>% abs(),
                                fill= key
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               )) + geom_path(
+                     aes(x = rep(c(100:10000),3),y=-value,color=key)) + theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
     legend.title=element_blank(),legend.position="bottom",
     legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS") +
-  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
-p5 <- ggplot(data = df_mu_VaR %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95")) + geom_path(
-                     aes(x = N,y=value,color=variable)) +
+p5 <- ggplot(data = df_mu_VaR %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95"))  +
   theme_bw() + geom_ribbon(aes(x = N,
                                min = min,
                                max = max,
                                fill= variable
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               )) + geom_path(
+                     aes(x = N,y=value,color=variable))+ theme(#panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    panel.border = element_rect(colour = "black"),
+    legend.title=element_blank(),legend.position="none",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
+
+p6 <- ggplot(data = df_mu_VaR %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95"))  +
+  theme_bw() + geom_ribbon(aes(x = N,
+                               min = min,
+                               max = max,
+                               fill= variable
+                               ))+ geom_path(
+                     aes(x = N,y=value,color=variable)) + theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
     legend.title=element_blank(),legend.position="bottom",
     legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
-  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
-p6 <- ggplot(data = df_mu_VaR %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95")) + geom_path(
-                     aes(x = N,y=value,color=variable)) +
+p7 <- ggplot(data = df_mu_ES %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95"))  +
   theme_bw() + geom_ribbon(aes(x = N,
                                min = min,
                                max = max,
                                fill= variable
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               ))+ geom_path(
+                     aes(x = N,y=value,color=variable)) + theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
-    legend.title=element_blank(),legend.position="bottom",
-    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
-  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+    legend.title=element_blank(),legend.position="none",
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift ES)") +
+  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
-p7 <- ggplot(data = df_mu_ES %>% filter(variable == "VaR99"|variable == "VaR97.5"|variable == "VaR95")) + geom_path(
-                     aes(x = N,y=value,color=variable)) +
+p8 <- ggplot(data = df_mu_ES %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95")) +
   theme_bw() + geom_ribbon(aes(x = N,
                                min = min,
                                max = max,
                                fill= variable
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
+                               ))+ geom_path(
+                     aes(x = N,y=value,color=variable))  + theme(#panel.grid.major = element_blank(),
     #panel.grid.minor = element_blank(),
     strip.background = element_blank(),
     panel.border = element_rect(colour = "black"),
     legend.title=element_blank(),legend.position="bottom",
-    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
-  ylab("VaR") + xlab("N")+ ylim(c(1,5.5))
-
-p8 <- ggplot(data = df_mu_ES %>% filter(variable == "ES99"|variable == "ES97.5"|variable == "ES95")) + geom_path(
-                     aes(x = N,y=value,color=variable)) +
-  theme_bw() + geom_ribbon(aes(x = N,
-                               min = min,
-                               max = max,
-                               fill= variable
-                               ),alpha = 0.2) + theme(#panel.grid.major = element_blank(),
-    #panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    panel.border = element_rect(colour = "black"),
-    legend.title=element_blank(),legend.position="bottom",
-    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift VaR)") +
-  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))
+    legend.direction = "horizontal",legend.key.width = unit(12, "points"))+ ggtitle("IS(location shift ES)") +
+  ylab("ES") + xlab("N") +ylim(c(1.5,6.9))+
+  scale_fill_manual(values = c("#FDE3E1","#CCF1D7","#DFEBFF")) 
 
 
 grid.arrange(p1, p3, p5, p7,
@@ -450,5 +458,147 @@ grid.arrange(p1, p3, p5, p7,
 grid.arrange(p2, p4, p6, p8,
              ncol = 2) 
 ```
+
+### 評価
+
+```{r}
+var99 <- sapply(df$log_x[-1],function(x) x < -ev_table1[-1,1]) %>% t() 
+var975 <- sapply(df$log_x[-1],function(x) x < -ev_table1[-1,2]) %>% t()
+colSums(var99) / length(df$log_x)
+colSums(var975) / length(df$log_x)
+
+Ec_99 <- length(df$log_x) * 0.01
+Ec_97.5 <- length(df$log_x) * 0.025
+
+sum((df$log_x[-1][which(var99[,1] == TRUE)] / -ev_table1[2,4]  -1)/Ec_99)
+sum((df$log_x[-1][which(var99[,2] == TRUE)] / -ev_table1[3,4]  -1)/Ec_99)
+sum((df$log_x[-1][which(var99[,3] == TRUE)] / -ev_table1[4,4]  -1)/Ec_99)
+sum((df$log_x[-1][which(var99[,4] == TRUE)] / -ev_table1[5,4]  -1)/Ec_99)
+
+
+sum((df$log_x[-1][which(var975[,1] == TRUE)] / -ev_table1[2,5]  -1)/Ec_97.5)
+sum((df$log_x[-1][which(var975[,2] == TRUE)] / -ev_table1[3,5]  -1)/Ec_97.5)
+sum((df$log_x[-1][which(var975[,3] == TRUE)] / -ev_table1[4,5]  -1)/Ec_97.5)
+sum((df$log_x[-1][which(var975[,4] == TRUE)] / -ev_table1[5,5]  -1)/Ec_97.5)
+```
+
+# 時系列まとめ
+
+```{r}
+load("data/20180530_rolling_result_useoldpara.Rdata")
+colnames(result) <- c("dt","IS_VaR_fa_0.01","IS_ES_fa_0.01",
+                      "IS_VaR_fa_0.025","IS_ES_fa_0.025",
+                      "IS_VaR_fa_0.05","IS_ES_fa_0.05",
+                      "IS_VaR_norm_0.01","IS_ES_norm_0.01",
+                      "IS_VaR_norm_0.025","IS_ES_norm_0.025",
+                      "IS_VaR_norm_0.05","IS_ES_norm_0.05",
+                      "SMC_VaR_fa_0.01","SMC_VaR_fa_0.025","SMC_VaR_fa_0.05",
+                      "SMC_ES_fa_0.01","SMC_ES_fa_0.025","SMC_ES_fa_0.05",
+                      "SMC_VaR_norm_0.01","SMC_VaR_norm_0.025","SMC_VaR_norm_0.05",
+                      "SMC_ES_norm_0.01","SMC_ES_norm_0.025","SMC_ES_norm_0.05",
+                      "mu","sigma","lambda","delta")
+
+
+result_para <- result[,c(1,26,27,28,29)]  %>% data.frame()
+load("data/location_time0701")
+
+load("data/20180701_2_rolling_result_useoldpara.Rdata")
+
+
+colnames(result) <- c("IS_VaR_fa_0.01","IS_ES_fa_0.01",
+                      "IS_VaR_fa_0.025","IS_ES_fa_0.025",
+                      "IS_VaR_fa_0.05","IS_ES_fa_0.05",
+                      "IS_VaR_norm_0.01","IS_ES_norm_0.01",
+                      "IS_VaR_norm_0.025","IS_ES_norm_0.025",
+                      "IS_VaR_norm_0.05","IS_ES_norm_0.05",
+                      "SMC_VaR_fa_0.01","SMC_VaR_fa_0.025","SMC_VaR_fa_0.05",
+                      "SMC_ES_fa_0.01","SMC_ES_fa_0.025","SMC_ES_fa_0.05",
+                      "SMC_VaR_norm_0.01","SMC_VaR_norm_0.025","SMC_VaR_norm_0.05",
+                      "SMC_ES_norm_0.01","SMC_ES_norm_0.025","SMC_ES_norm_0.05")
+
+
+
+result_VaR <- result[,c(1,3,5,7,9,11,13,14,15,19,20,21)]
+result_ES <- result[,c(2,4,6,8,10,12,16,17,18,22,23,24)]
+
+result_VaR_new <- cbind(result_VaR,result_location_time_var[,c(1,3,5)],
+                        result_location_time_es[,c(1,3,5)])
+result_ES_new <- cbind(result_ES,
+                       result_location_time_var[,c(2,4,5)],
+                        result_location_time_es[,c(2,4,6)])
+```
+
+
+
+
+
+```{r}
+#VaR
+check_VaR <- apply(data.frame(df$log_x[251:length(df$log_x)], result_VaR_new), 1,
+      function(x) x[1] < x[-1]) %>% t()
+
+count_VaR <- colSums(check_VaR)
+#print("Check count over Estimate VaR")
+tmp <- count_VaR/ dim(check_VaR)[1]
+var_ev_matrix <- matrix(0,ncol=3,nrow=6)
+colnames(var_ev_matrix) <- c("99","97.5","95")
+rownames(var_ev_matrix) <- c("SMC_norm","IS_norm","SMC_FA","IS_FA",
+                             "IS_FA_VaR","IS_FA_ES")
+var_ev_matrix[1,] <- tmp[4:6]
+var_ev_matrix[2,] <- tmp[10:12]
+var_ev_matrix[3,] <- tmp[7:9] 
+var_ev_matrix[4,] <- tmp[1:3] 
+var_ev_matrix[5,] <- tmp[13:15] 
+var_ev_matrix[6,] <- tmp[16:18] 
+var_ev_matrix
+#xtable(var_ev_matrix[,-3],digits=3)
+#data.frame(count_VaR/ dim(check_VaR)[1]) %>% t()
+#ES?
+eval_ES <- check_VaR * apply(result_ES_new,2,
+                             function(x) abs(df$log_x[c(251:length(df$dt))] - x)/ -x)
+
+eval_ES_table <- matrix(colMeans(eval_ES),ncol=3,byrow = T)
+eval_ES_table
+#xtable(cbind(var_ev_matrix[,-3],eval_ES_table[c(4,2,3,1,5,6),-3]),digits=4)
+```
+
+### plot
+
+```{r,eval=FALSE}
+result_VaR_plot99 <- result_VaR_new[,c(1,4,7,10,13,16)]
+colnames(result_VaR_plot99) <- c("IS_VaR_fa","IS_VaR_norm",
+                               "SMC_VaR_fa","SMC_VaR_norm",
+                               "IS_VaR_fa(shift_VaR)","IS_VaR_fa(shift_ES)")
+
+plot_d <- cbind(dt = df$dt[251:length(df$dt)],result_VaR_plot99)
+
+p1 <- ggplot(plot_d %>% gather(variable,value,-dt)) + geom_path(aes(dt,value,color=variable))+
+  theme_bw() + theme(legend.position = "none")+
+  theme(axis.title.x = element_text(size=25),axis.title.y = element_text(size=25))+
+  theme(axis.text.x = element_text(size=25),axis.text.y = element_text(size=25)) +
+  theme(legend.title = element_text(size=15),legend.text = element_text(size=15))
+
+result_ES_plot99 <- result_ES_new[,c(1,4,7,10,13,16)]
+colnames(result_ES_plot99) <- c("IS_fa","IS_norm",
+                               "SMC_fa","SMC_norm",
+                               "IS_fa(shift_VaR)","IS_fa(shift_ES)")
+
+plot_d <- cbind(dt = df$dt[251:length(df$dt)],result_ES_plot99)
+
+p2 <- ggplot(plot_d %>% gather(variable,value,-dt)) + geom_path(aes(dt,value,color=variable))+
+  theme_bw() + theme(legend.position = "bottom")+
+  theme(axis.title.x = element_text(size=25),axis.title.y = element_text(size=25))+
+  theme(axis.text.x = element_text(size=25),axis.text.y = element_text(size=25)) +
+  theme(legend.title = element_text(size=15),legend.text = element_text(size=15)) +
+
+
+grid.arrange(p1, p2,
+             ncol = 1) 
+
+```
+
+
+
+
 
 
