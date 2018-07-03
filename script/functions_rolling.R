@@ -20,8 +20,11 @@ SMC.fa_pre <-function(theta){
   return(out)
 } 
 
+
+
 # 重点サンプリングの関数(d.ISを提案分布に局度変換を伴うsinh-arcsinh分布のVaR,ESを求める)
-IS.fa_pre <- function(){
+IS.fa_pre <- function(par){
+  fit$par2 <- par
   f <- function(x, theta, par){
     exp(theta*x)*dfas2(x, mu=par[1], sigma=par[2],
                        lambda=par[3], delta=par[4])
@@ -157,7 +160,7 @@ rIS_SIR <- function(n, par, par2, theta){
   q <- rnorm(n,mean=par2,sd=15)
   ## 重み
   w <- sapply(q, 
-                 d.IS, theta =theta, par=par)/dnorm(q, mean=par2, sd=15)
+                 d.IS, theta =theta, par=par) %>% as.numeric()/dnorm(q, mean=par2, sd=15)
   w <- w/sum(w)
   ## resample
   q.resample <- Resample1(q, weight=w, NofSample = n)
@@ -215,52 +218,6 @@ rIS_SIR_para <- function(n, par, par2, theta){
   list( q=q.resample, w=w)
 }
 
-# 重点サンプリングの関数(d.ISを提案分布に局度変換を伴うsinh-arcsinh分布のVaR,ESを求める)
-IS.fa_pre <- function(){
-  f <- function(x, theta, par){
-    exp(theta*x)*dfas2(x, mu=par[1], sigma=par[2],
-                       lambda=par[3], delta=par[4])
-  }
-  #weightを計算するためにMを計算する．99%,97.5%,95%をまとめて行う
-  M1 <- integrate(f, -30, 30, theta=theta.val1, par=fit$par2)$value
-  M25 <- integrate(f, -30, 30, theta=theta.val25, par=fit$par2)$value
-  M5 <- integrate(f, -30, 30, theta=theta.val5, par=fit$par2)$value
-  
-  #weightを計算する
-  w1 <- exp(-theta.val1*rfa1)*M1
-  w25 <- exp(-theta.val25*rfa25)*M25
-  w5 <- exp(-theta.val5*rfa5)*M5
-  
-  #99%点での計算 100~10000までサンプル数を増やして行う
-  out1<-cbind( rfa1,  w1/10000)
-  # サンプルの小さい順にならべかえる
-  A <- out1[sort.list(out1[,1]),]
-  # weightの累積和を並べる
-  A <- cbind(A, cumsum(A[,2]))
-  # 累積和が0.01に一番近いサンプルが99%VaR
-  # v1までのサンプルからES0.01の推定値を求める
-  v1 <- A[which.min(abs(A[,3]-0.01)),1]
-  es1<- sum(apply(A[1:which.min(abs(A[,3]-0.01)),1:2],1,prod))/0.01
-  out1 <- c(v1, es1)
-  
-  
-  out25<-cbind(rfa25,  w25/10000)
-  A <- out25[sort.list(out25[,1]),]
-  A <- cbind(A, cumsum(A[,2]))
-  v25 <- A[which.min(abs(A[,3]-0.025)),1]
-  es25<- sum(apply(A[1:which.min(abs(A[,3]-0.025)),1:2],1,prod))/0.025
-  out25 <- c(v25, es25)
-  
-  out5<-cbind( rfa5,  w5/10000)
-  A <- out5[sort.list(out5[,1]),]
-  A <- cbind(A, cumsum(A[,2]))
-  v5 <- A[which.min(abs(A[,3]-0.05)),1]
-  es5<- sum(apply(A[1:which.min(abs(A[,3]-0.05)),1:2],1,prod))/0.05
-  out5 <- c(v5, es5)
-  
-  return(out = cbind(t(out1),t(out25),t(out5)))
-  
-}
 
 # 重点サンプリングの関数(d.ISを提案分布に局度変換を伴うsinh-arcsinh分布のVaR,ESを求める)
 IS.fa_para_pre <- function(){

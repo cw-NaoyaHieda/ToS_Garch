@@ -266,7 +266,7 @@ d.IS <- function(x, theta,par){
                        lambda=par[3], delta=par[4])
   }
   # 分母
-  M <- integrate(f, -30, 30, theta=theta, par=par)$value
+  M <- integrate(f, -30, 30, theta=theta, par=par %>% as.numeric())$value
   return( f(x, theta, par)/M )
 }
 
@@ -334,3 +334,25 @@ IS.fa <- function(){
   
   
   return( list(out = cbind(t(out1),t(out25),t(out5)), VaR.true.FA, ES.true.FA ) ) }
+
+
+
+#Fsaからの乱数 SIR並列処理
+rfa_SIR<- function(n, mu, sigma, lambda, delta)
+{
+  ## 正規分布を提案分布に
+  q <- rnorm(n,mean=mu %>% as.numeric(),sd=5*sigma %>% as.numeric())
+  ## 重み
+  w <- sapply(q, dfas2, mu=mu, sigma=sigma, lambda=lambda, delta=delta) %>% as.numeric()/
+    dnorm(q, mean=mu %>% as.numeric(), sd=5*sigma %>% as.numeric()) %>% as.numeric()
+  ## 合計が1になるように重みを基準化
+  w <- w/sum(w)
+  ## 重みに従ってresample
+  q.resample <- Resample1(q, weight=w, NofSample = n)
+  list(q,q=q.resample, w=w)
+}
+
+Expected.val.th <- function(VaR, mu, sd){
+  #M <- exp(mu*th+ sd^2*th^2/2)
+  #m <- mu+sd^2*th
+  return( (VaR - mu)/sd^2 )}
